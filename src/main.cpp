@@ -9,6 +9,9 @@
 // Linear Algebra Library
 #include <Eigen/Core>
 
+// IO Stream
+#include <iostream>
+
 // Timer
 #include <chrono>
 
@@ -16,14 +19,30 @@
 VertexBufferObject VBO;
 
 // Contains the vertex positions
-Eigen::MatrixXf V(2,3);
+//(numRows, numCols)
+Eigen::MatrixXf V(2,6);
 
-void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
+// Holds # of clicks for triangle creation, or is NULL
+int clickCount = -1;
+
+// Change from line segments to a triangle
+bool readyForTriangle = false;
+
+// Am I currently creating a triangle? (1.1)
+bool insertionMode = false;
+
+// Am I currently translating a triangle?
+bool translationMode = false;
+
+// Am I currently deleting a triangle?
+bool deleteMode = false;
+
+double currentX, currentY, previousX, previousY;
+
+void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos)
 {
-    // Get the position of the mouse in the window
-    double xpos, ypos;
-    glfwGetCursorPos(window, &xpos, &ypos);
-
+  if(insertionMode && clickCount > 0)
+  {
     // Get the size of the window
     int width, height;
     glfwGetWindowSize(window, &width, &height);
@@ -32,34 +51,104 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
     double xworld = ((xpos/double(width))*2)-1;
     double yworld = (((height-1-ypos)/double(height))*2)-1; // NOTE: y axis is flipped in glfw
 
-    // Update the position of the first vertex if the left button is pressed
-    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS)
-        V.col(0) << xworld, yworld;
+    // Store coordinates in V and send to GPU
+    if(clickCount == 1){
+      V.col(clickCount) << xworld, yworld;
+    }else if(clickCount == 2){
+      V(0,3) = xworld;
+      V(1,3) = yworld;
+      V(0,5) = xworld,
+      V(1,5) = yworld;
+    }
 
-    // Upload the change to the GPU
     VBO.update(V);
+  }
+}
+void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
+{
+
+    if(insertionMode && action == GLFW_RELEASE) // creating a triangle out of line segments!
+    {
+      // Reset counter
+      if(clickCount == -1) clickCount = 0;
+
+      // Get the position of the mouse in the window
+      double xpos, ypos;
+      glfwGetCursorPos(window, &xpos, &ypos);
+
+      // Get the size of the window
+      int width, height;
+      glfwGetWindowSize(window, &width, &height);
+
+      // Convert screen position to world coordinates
+      double xworld = ((xpos/double(width))*2)-1;
+      double yworld = (((height-1-ypos)/double(height))*2)-1; // NOTE: y axis is flipped in glfw
+
+      // Update clickCount
+      std::cout << "Mouse clicked in INSERTION mode" << std::endl;
+      if(clickCount == 0) // First click
+      {
+        // Clicking for the frist time, so set the 'line' to the same coords
+        V << xworld, xworld, yworld, yworld, xworld, yworld, xworld, yworld, xworld, yworld, xworld, yworld;
+        std::cout << "\t" << V << std::endl;
+        VBO.update(V);
+      }else if(clickCount == 1){ // Second click
+        std::cout << "\t Changing V for multiple dynamic lines" << std::endl;
+        V.col(clickCount) << xworld, yworld;
+        V.col(clickCount+1) << V(0,0), V(1,0);
+        V.col(clickCount+2) << xworld, yworld;
+        V.col(clickCount+3) << V(0,1), V(1,1);
+        V.col(clickCount+4) << xworld, yworld;
+        VBO.update(V);
+        std::cout << '\t' << V << std::endl;
+      }else if(clickCount == 2){
+        insertionMode = false;
+        Eigen::MatrixXf V_final(2,3);
+        V_final.col(0) << V(0,0), V(1,0);
+        V_final.col(1) << V(0,1), V(1,1);
+        V_final.col(2) << xworld, yworld;
+        VBO.update(V_final);
+
+      }
+      clickCount++;
+      std::cout << "\t clickCount: " << clickCount << std::endl;
+
+
+    }
 }
 
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
-    // Update the position of the first vertex if the keys 1,2, or 3 are pressed
-    switch (key)
+    // Set boolean variables if I, O, or P is pressed
+    if(action == GLFW_RELEASE)
     {
-        case  GLFW_KEY_1:
-            V.col(0) << -0.5,  0.5;
-            break;
-        case GLFW_KEY_2:
-            V.col(0) << 0,  0.5;
-            break;
-        case  GLFW_KEY_3:
-            V.col(0) << 0.5,  0.5;
-            break;
-        default:
-            break;
+      switch (key)
+      {
+          case  GLFW_KEY_I:
+              std::cout << "INSERTION mode: " << !insertionMode << std::endl;
+              insertionMode = !insertionMode;
+              translationMode = false;
+              deleteMode = false;
+              break;
+          case GLFW_KEY_O:
+              std::cout << "TRANSLATION mode"  << !translationMode << std::endl;
+              insertionMode = false;
+              translationMode = !translationMode;
+              deleteMode = false;
+              break;
+          case  GLFW_KEY_P:
+            std::cout << "DELETE mode"  << !deleteMode  << std::endl;
+              insertionMode = false;
+              translationMode = false;
+              deleteMode = !deleteMode;
+              break;
+          default:
+              break;
+      } // End switch
     }
 
     // Upload the change to the GPU
-    VBO.update(V);
+    // VBO.update(V);
 }
 
 int main(void)
@@ -77,13 +166,17 @@ int main(void)
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
 
-    // On apple we have to load a core profile with forward compatibility
-#ifdef __APPLE__
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-#endif
+        // On apple we have to load a core profile with forward compatibility
+    #ifdef __APPLE__
+        glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+        glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+    #endif
 
     // Create a windowed mode window and its OpenGL context
+    /**
+    The fourth parameter should be set to NULL for windowed mode and glfwGetPrimaryMonitor() for fullscreen mode.
+    The last parameter allows you to specify an existing OpenGL context to share resources like textures with
+    **/
     window = glfwCreateWindow(640, 480, "Hello World", NULL, NULL);
     if (!window)
     {
@@ -126,9 +219,7 @@ int main(void)
     // Initialize the VBO with the vertices data
     // A VBO is a data container that lives in the GPU memory
     VBO.init();
-
-    V.resize(2,3);
-    V << 0,  0.5, -0.5, 0.5, -0.5, -0.5;
+    V << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
     VBO.update(V);
 
     // Initialize the OpenGL Program
@@ -168,8 +259,11 @@ int main(void)
     // Register the keyboard callback
     glfwSetKeyCallback(window, key_callback);
 
-    // Register the mouse callback
+    // Register the mouse click callback
     glfwSetMouseButtonCallback(window, mouse_button_callback);
+
+    // Register the mouse movement callback
+    glfwSetCursorPosCallback(window, cursor_pos_callback);
 
     // Loop until the user closes the window
     while (!glfwWindowShouldClose(window))
@@ -180,23 +274,34 @@ int main(void)
         // Bind your program
         program.bind();
 
-        // Set the uniform value depending on the time difference
-        auto t_now = std::chrono::high_resolution_clock::now();
-        float time = std::chrono::duration_cast<std::chrono::duration<float>>(t_now - t_start).count();
-        glUniform3f(program.uniform("triangleColor"), (float)(sin(time * 4.0f) + 1.0f) / 2.0f, 0.0f, 0.0f);
+        // // Set the uniform value depending on the time difference
+        // auto t_now = std::chrono::high_resolution_clock::now();
+        // float time = std::chrono::duration_cast<std::chrono::duration<float>>(t_now - t_start).count();
+        // glUniform3f(program.uniform("triangleColor"), (float)(sin(time * 4.0f) + 1.0f) / 2.0f, 0.0f, 0.0f);
 
         // Clear the framebuffer
         glClearColor(0.5f, 0.5f, 0.5f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
-        // Draw a triangle
-        glDrawArrays(GL_TRIANGLES, 0, 3);
+        // Draw a line
+        if(clickCount == 1){
+          // std::cout << "Drawing a single line " << std::endl;
+          glDrawArrays(GL_LINES, 0, 2);
+        }else if(clickCount ==  2){ //need to trace out 3 lines
+          std::cout << "Drawing several lines " << std::endl;
+          glDrawArrays(GL_LINES, 0, 6);
+        }else if(clickCount == 3){
+          std::cout << "Drawing a triangle " << std::endl;
+          glDrawArrays(GL_TRIANGLES, 0, 3);
+        }
+
 
         // Swap front and back buffers
         glfwSwapBuffers(window);
 
         // Poll for and process events
         glfwPollEvents();
+
     }
 
     // Deallocate opengl memory
