@@ -89,7 +89,7 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
       if(clickCount == 0) // First click
       {
         // Clicking for the frist time, so set the 'line' to the same coords
-        V << xworld, xworld, yworld, yworld, xworld, yworld, xworld, yworld, xworld, yworld, xworld, yworld;
+        V << xworld, xworld, xworld, xworld, xworld, xworld, yworld, yworld, yworld, yworld, yworld, yworld;
         std::cout << "\t" << V << std::endl;
         VBO.update(V);
       }else if(clickCount == 1){ // Second click
