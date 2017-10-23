@@ -25,6 +25,9 @@ Eigen::MatrixXf V(2,6);
 // Holds # of clicks for triangle creation, or is NULL
 int clickCount = -1;
 
+// # of triangles that will be drawn
+int numTriangles = 0;
+
 // Change from line segments to a triangle
 bool readyForTriangle = false;
 
@@ -53,12 +56,14 @@ void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos)
 
     // Store coordinates in V and send to GPU
     if(clickCount == 1){
-      V.col(clickCount) << xworld, yworld;
+      V.col( (numTriangles * 3) + 1) << xworld, yworld;
     }else if(clickCount == 2){
-      V(0,3) = xworld;
-      V(1,3) = yworld;
-      V(0,5) = xworld,
-      V(1,5) = yworld;
+      V(0, (numTriangles * 3) + 3) = xworld;
+      V(1, (numTriangles * 3) + 3) = yworld;
+      V(0, (numTriangles * 3) + 5) = xworld;
+      V(1, (numTriangles * 3) + 5) = yworld;
+      // std::cout << "After second click: " << std::endl;
+      // std::cout << V << std::endl;
     }
 
     VBO.update(V);
@@ -88,26 +93,50 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
       std::cout << "Mouse clicked in INSERTION mode" << std::endl;
       if(clickCount == 0) // First click
       {
-        // Clicking for the frist time, so set the 'line' to the same coords
-        V << xworld, xworld, xworld, xworld, xworld, xworld, yworld, yworld, yworld, yworld, yworld, yworld;
+        V.conservativeResize(2, (numTriangles*3)+6);
+
+        // Clicking for the first time, so set the 'line' to the same coords
+        V(0, ( numTriangles * 3) ) = xworld;
+        V(0, (( numTriangles * 3) + 1) ) = xworld;
+        V(0, (( numTriangles * 3) + 2) ) = xworld;
+        V(0, (( numTriangles * 3) + 3) ) = xworld;
+        V(0, (( numTriangles * 3) + 4) ) = xworld;
+        V(0, (( numTriangles * 3) + 5) ) = xworld;
+        V(1, ( numTriangles * 3) ) = yworld;
+        V(1, (( numTriangles * 3) + 1) ) = yworld;
+        V(1, (( numTriangles * 3) + 2) ) = yworld;
+        V(1, (( numTriangles * 3) + 3) ) = yworld;
+        V(1, (( numTriangles * 3) + 4) ) = yworld;
+        V(1, (( numTriangles * 3) + 5) ) = yworld;
+
         std::cout << "\t" << V << std::endl;
         VBO.update(V);
       }else if(clickCount == 1){ // Second click
-        std::cout << "\t Changing V for multiple dynamic lines" << std::endl;
-        V.col(clickCount) << xworld, yworld;
-        V.col(clickCount+1) << V(0,0), V(1,0);
-        V.col(clickCount+2) << xworld, yworld;
-        V.col(clickCount+3) << V(0,1), V(1,1);
-        V.col(clickCount+4) << xworld, yworld;
+        // std::cout << "\t Changing V for multiple dynamic lines" << std::endl;
+        V.col(( numTriangles * 3 ) + 1) << xworld, yworld;
+        V.col( (numTriangles * 3) + 2) << V( 0, ( numTriangles * 3 )), V( 1, ( numTriangles * 3 ));
+        V.col( (numTriangles * 3) + 3) << xworld, yworld;
+        V.col( (numTriangles * 3) + 4) << xworld, yworld;
+        V.col( (numTriangles * 3) + 5) << xworld, yworld;
+
         VBO.update(V);
-        std::cout << '\t' << V << std::endl;
+        // std::cout << '\t' << V << std::endl;
       }else if(clickCount == 2){
-        insertionMode = false;
-        Eigen::MatrixXf V_final(2,3);
-        V_final.col(0) << V(0,0), V(1,0);
-        V_final.col(1) << V(0,1), V(1,1);
-        V_final.col(2) << xworld, yworld;
-        VBO.update(V_final);
+        Eigen::MatrixXf V_alt(2, (numTriangles * 3) + 3);
+        int start_column = numTriangles * 3;
+        // copy everything before start column into new matrix
+        for(int i = 0; i < start_column; i++)
+        {
+          V_alt.col(i) = V.col(i);
+        }
+        V_alt.col(start_column) << V(0, start_column), V(1, start_column);
+        V_alt.col(start_column + 1) << V(0, (start_column + 1)), V(1, (start_column + 1));
+        V_alt.col(start_column + 2) << xworld, yworld;
+        V.resize(2, ((numTriangles+1) * 3));
+        V = V_alt;
+        std::cout << "\t" << V << std::endl;
+        VBO.update(V);
+        numTriangles++;
 
       }
       clickCount++;
@@ -286,15 +315,20 @@ int main(void)
         // Draw a line
         if(clickCount == 1){
           // std::cout << "Drawing a single line " << std::endl;
-          glDrawArrays(GL_LINES, 0, 2);
+          glDrawArrays(GL_LINES, (numTriangles*3), 2);
         }else if(clickCount ==  2){ //need to trace out 3 lines
-          std::cout << "Drawing several lines " << std::endl;
-          glDrawArrays(GL_LINES, 0, 6);
+          // std::cout << "Drawing several lines " << std::endl;
+          glDrawArrays(GL_LINES, (numTriangles*3), 6);
         }else if(clickCount == 3){
-          std::cout << "Drawing a triangle " << std::endl;
-          glDrawArrays(GL_TRIANGLES, 0, 3);
+          // std::cout << "Drawing a triangle " << std::endl;
+          clickCount = 0;
+          // glDrawArrays(GL_TRIANGLES, 0, 3);
         }
 
+        if(numTriangles > 0){
+          // std::cout << "Drawing a triangle " << std::endl;
+          glDrawArrays( GL_TRIANGLES, 0, (numTriangles * 3));
+        }
 
         // Swap front and back buffers
         glfwSwapBuffers(window);
