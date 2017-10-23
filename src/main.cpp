@@ -22,8 +22,15 @@ VertexBufferObject VBO;
 //(numRows, numCols)
 Eigen::MatrixXf V(2,6);
 
-// Holds # of clicks for triangle creation, or is NULL
-int clickCount = -1;
+// Holds # of clicks for triangle insertion
+int insertClickCount = 0;
+
+// If translationMode && mouse is pressed
+bool translationPressed = false;
+
+// Holds the indices of the triangle in V being translated
+int translationIdxX = -1;
+int translationIdxY = -1;
 
 // # of triangles that will be drawn
 int numTriangles = 0;
@@ -44,7 +51,7 @@ double currentX, currentY, previousX, previousY;
 
 void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos)
 {
-  if(insertionMode && clickCount > 0)
+  if(insertionMode && insertClickCount > 0)
   {
     // Get the size of the window
     int width, height;
@@ -55,9 +62,9 @@ void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos)
     double yworld = (((height-1-ypos)/double(height))*2)-1; // NOTE: y axis is flipped in glfw
 
     // Store coordinates in V and send to GPU
-    if(clickCount == 1){
+    if(insertClickCount == 1){
       V.col( (numTriangles * 3) + 1) << xworld, yworld;
-    }else if(clickCount == 2){
+    }else if(insertClickCount == 2){
       V(0, (numTriangles * 3) + 3) = xworld;
       V(1, (numTriangles * 3) + 3) = yworld;
       V(0, (numTriangles * 3) + 5) = xworld;
@@ -65,8 +72,13 @@ void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos)
       // std::cout << "After second click: " << std::endl;
       // std::cout << V << std::endl;
     }
-
     VBO.update(V);
+  }
+
+  if(translationMode && translationPressed)
+  {
+    // Get the mouse coordinates
+    // Shift the indices of the triangle in V based on the difference
   }
 }
 void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
@@ -74,9 +86,6 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 
     if(insertionMode && action == GLFW_RELEASE) // creating a triangle out of line segments!
     {
-      // Reset counter
-      if(clickCount == -1) clickCount = 0;
-
       // Get the position of the mouse in the window
       double xpos, ypos;
       glfwGetCursorPos(window, &xpos, &ypos);
@@ -89,9 +98,9 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
       double xworld = ((xpos/double(width))*2)-1;
       double yworld = (((height-1-ypos)/double(height))*2)-1; // NOTE: y axis is flipped in glfw
 
-      // Update clickCount
+      // Update insertClickCount
       std::cout << "Mouse clicked in INSERTION mode" << std::endl;
-      if(clickCount == 0) // First click
+      if(insertClickCount == 0) // First click
       {
         V.conservativeResize(2, (numTriangles*3)+6);
 
@@ -111,7 +120,7 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 
         std::cout << "\t" << V << std::endl;
         VBO.update(V);
-      }else if(clickCount == 1){ // Second click
+      }else if(insertClickCount == 1){ // Second click
         // std::cout << "\t Changing V for multiple dynamic lines" << std::endl;
         V.col(( numTriangles * 3 ) + 1) << xworld, yworld;
         V.col( (numTriangles * 3) + 2) << V( 0, ( numTriangles * 3 )), V( 1, ( numTriangles * 3 ));
@@ -121,7 +130,7 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 
         VBO.update(V);
         // std::cout << '\t' << V << std::endl;
-      }else if(clickCount == 2){
+      }else if(insertClickCount == 2){
         Eigen::MatrixXf V_alt(2, (numTriangles * 3) + 3);
         int start_column = numTriangles * 3;
         // copy everything before start column into new matrix
@@ -139,10 +148,43 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
         numTriangles++;
 
       }
-      clickCount++;
-      std::cout << "\t clickCount: " << clickCount << std::endl;
+      insertClickCount++;
+      std::cout << "\t insertClickCount: " << insertClickCount << std::endl;
 
 
+    }
+
+    else if(translationMode)
+    {
+      // Get the position of the mouse in the window
+      double xpos, ypos;
+      glfwGetCursorPos(window, &xpos, &ypos);
+
+      // Get the size of the window
+      int width, height;
+      glfwGetWindowSize(window, &width, &height);
+
+      // Convert screen position to world coordinates
+      double xworld = ((xpos/double(width))*2)-1;
+      double yworld = (((height-1-ypos)/double(height))*2)-1; // NOTE: y axis is flipped in glfw
+
+      if(action == GLFW_PRESS)
+      {
+        // Set translationPressed to true
+        // See if cursor position is within or on the border of a triangle
+        // If it is, save V indices of selected triangle for mouse movement
+
+      }else if(action == GLFW_RELEASE)
+      {
+        // Set the V indices to current mouse position
+        // Set translationPressed to false
+      }
+
+    }else if(deleteMode && action == GLFW_RELEASE)
+    {
+      // See if cursor position is within or on the border of a triangle
+      // If it is, remove the 3 vertices from V
+      // Decrement numTriangles counter
     }
 }
 
@@ -312,21 +354,18 @@ int main(void)
         glClearColor(0.5f, 0.5f, 0.5f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
-        // Draw a line
-        if(clickCount == 1){
-          // std::cout << "Drawing a single line " << std::endl;
+
+        // CREATING TRAINGLES
+        if(insertClickCount == 1){
           glDrawArrays(GL_LINES, (numTriangles*3), 2);
-        }else if(clickCount ==  2){ //need to trace out 3 lines
-          // std::cout << "Drawing several lines " << std::endl;
+        }else if(insertClickCount ==  2){ //need to trace out 3 lines
           glDrawArrays(GL_LINES, (numTriangles*3), 6);
-        }else if(clickCount == 3){
-          // std::cout << "Drawing a triangle " << std::endl;
-          clickCount = 0;
-          // glDrawArrays(GL_TRIANGLES, 0, 3);
+        }else if(insertClickCount == 3){
+          insertClickCount = 0;
         }
 
+        // DRAWING TRIANGLES
         if(numTriangles > 0){
-          // std::cout << "Drawing a triangle " << std::endl;
           glDrawArrays( GL_TRIANGLES, 0, (numTriangles * 3));
         }
 
