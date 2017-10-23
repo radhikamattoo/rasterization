@@ -9,11 +9,17 @@
 // Linear Algebra Library
 #include <Eigen/Core>
 
+// For A x = b solver
+#include <Eigen/Dense>
+
 // IO Stream
 #include <iostream>
 
 // Timer
 #include <chrono>
+
+using namespace std;
+using namespace Eigen;
 
 // VertexBufferObject wrapper
 VertexBufferObject VBO;
@@ -25,20 +31,18 @@ Eigen::MatrixXf V(2,6);
 // Holds # of clicks for triangle insertion
 int insertClickCount = 0;
 
-// If translationMode && mouse is pressed
+// If translationMode && clicked on a triangle && mouse is held down
 bool translationPressed = false;
 
 // Holds the indices of the triangle in V being translated
-int translationIdxX = -1;
-int translationIdxY = -1;
+int vertex_1_clicked = -1;
+int vertex_2_clicked = -1;
+int vertex_3_clicked = -1;
 
 // # of triangles that will be drawn
 int numTriangles = 0;
 
-// Change from line segments to a triangle
-bool readyForTriangle = false;
-
-// Am I currently creating a triangle? (1.1)
+// Am I currently creating a triangle?
 bool insertionMode = false;
 
 // Am I currently translating a triangle?
@@ -49,18 +53,92 @@ bool deleteMode = false;
 
 double currentX, currentY, previousX, previousY;
 
+void translateTriangle()
+{
+  // Shift the values of the triangle in V based on the difference
+  float coord_1_x = V(0, vertex_1_clicked);
+  float coord_1_y = V(1, vertex_1_clicked);
+
+  float coord_2_x = V(0, vertex_2_clicked);
+  float coord_2_y = V(1, vertex_2_clicked);
+
+  float coord_3_x = V(0, vertex_3_clicked);
+  float coord_3_y = V(1, vertex_3_clicked);
+
+  // Compare previousX and currentX, etc. and figure out translation
+  float x_difference;
+  float y_difference;
+  if(currentX > previousX) // mouse moved right
+  {
+    x_difference = currentX - previousX;
+    V(0, vertex_1_clicked) += x_difference;
+    V(0, vertex_2_clicked) += x_difference;
+    V(0, vertex_3_clicked) += x_difference;
+  }else{ // mouse moved left
+    x_difference = previousX - currentX;
+    V(0, vertex_1_clicked) -= x_difference;
+    V(0, vertex_2_clicked) -= x_difference;
+    V(0, vertex_3_clicked) -= x_difference;
+  }
+
+  if(currentY > previousY) // mouse moved up
+  {
+    y_difference = currentY - previousY;
+    V(1, vertex_1_clicked) += y_difference;
+    V(1, vertex_2_clicked) += y_difference;
+    V(1, vertex_3_clicked) += y_difference;
+  }else{ //mouse moved down
+    y_difference = previousY - currentY;
+    V(1, vertex_1_clicked) -= y_difference;
+    V(1, vertex_2_clicked) -= y_difference;
+    V(1, vertex_3_clicked) -= y_difference;
+  }
+}
+// Returns bool describing if the mouse clicked on a triangle
+bool clickedOnTriangle(double mousex, double mousey, float coord1_x, float coord1_y, float coord2_x, float coord2_y, float coord3_x, float coord3_y)
+{
+  Matrix3f A_;
+  Vector3f b_;
+  A_ << coord1_x, coord2_x, coord3_x, coord1_y, coord2_y, coord3_y, 1, 1, 1;
+  b_ << mousex, mousey, 1;
+
+  Vector3f sol = A_.colPivHouseholderQr().solve(b_);
+  float alpha = sol[0];
+  float beta = sol[1];
+  float gamma = sol[2];
+
+  if(alpha > 0 && beta > 0 && gamma > 0){
+    std::cout << "Clicked on a triangle!!" << std::endl;
+    return true;
+  }
+  return false;
+
+}
+
 void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos)
 {
+  // Get the size of the window
+  int width, height;
+  glfwGetWindowSize(window, &width, &height);
+
+  // Convert screen position to world coordinates
+  double xworld = ((xpos/double(width))*2)-1;
+  double yworld = (((height-1-ypos)/double(height))*2)-1; // NOTE: y axis is flipped in glfw
+
+  // Keep track of mouse positions
+  if(!previousX && previousY)
+  {
+    previousX = xworld;
+    previousY = yworld;
+  }else{
+    previousX = currentX;
+    previousY = currentY;
+
+    currentX = xworld;
+    currentY = yworld;
+  }
   if(insertionMode && insertClickCount > 0)
   {
-    // Get the size of the window
-    int width, height;
-    glfwGetWindowSize(window, &width, &height);
-
-    // Convert screen position to world coordinates
-    double xworld = ((xpos/double(width))*2)-1;
-    double yworld = (((height-1-ypos)/double(height))*2)-1; // NOTE: y axis is flipped in glfw
-
     // Store coordinates in V and send to GPU
     if(insertClickCount == 1){
       V.col( (numTriangles * 3) + 1) << xworld, yworld;
@@ -75,10 +153,10 @@ void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos)
     VBO.update(V);
   }
 
-  if(translationMode && translationPressed)
+  if(translationPressed)
   {
-    // Get the mouse coordinates
-    // Shift the indices of the triangle in V based on the difference
+    translateTriangle();
+    VBO.update(V);
   }
 }
 void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
@@ -170,14 +248,33 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 
       if(action == GLFW_PRESS)
       {
-        // Set translationPressed to true
         // See if cursor position is within or on the border of a triangle
-        // If it is, save V indices of selected triangle for mouse movement
+        for(int i = 0; i < V.cols(); i += 3) // 3 vertices per triangle
+        {
+          float coord1_x = V(0,i);
+          float coord1_y = V(1, i);
+
+          float coord2_x = V(0, i + 1);
+          float coord2_y = V(1, i + 1);
+
+          float coord3_x = V(0, i + 2);
+          float coord3_y = V(1, i + 2);
+
+          translationPressed = clickedOnTriangle(xworld, yworld, coord1_x, coord1_y, coord2_x, coord2_y, coord3_x, coord3_y);
+          // If it's clicked on, save V indices of selected triangle for mouse movement
+          if(translationPressed)
+          {
+            vertex_1_clicked = i;
+            vertex_2_clicked = i + 1;
+            vertex_3_clicked = i + 2;
+            break;
+          }
+        }
 
       }else if(action == GLFW_RELEASE)
       {
-        // Set the V indices to current mouse position
-        // Set translationPressed to false
+        // TODO: Update VBO?
+        translationPressed = false;
       }
 
     }else if(deleteMode && action == GLFW_RELEASE)
