@@ -292,29 +292,29 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
           vertex_2_clicked = i + 1;
           vertex_3_clicked = i + 2;
 
-          cout <<"Num triangles:" <<numTriangles << endl;
+          // cout <<"Num triangles:" <<numTriangles << endl;
           Eigen::MatrixXf V_alt(2, (numTriangles * 3));
 
-          cout <<"Old number of columns:" <<V.cols() << endl;
-          cout <<"New number of columns:" <<V_alt.cols() << endl;
+          // cout <<"Old number of columns:" <<V.cols() << endl;
+          // cout <<"New number of columns:" <<V_alt.cols() << endl;
 
           int alt_counter = 0;
           // Copy non-clicked columns of V into V_alt
           for(int cols = 0; cols < V.cols(); cols += 1)
           {
-            cout << cols << " : Column Number in V" << endl;
-            cout << alt_counter << " : Column Number in V_ALT" << endl;
+            // cout << cols << " : Column Number in V" << endl;
+            // cout << alt_counter << " : Column Number in V_ALT" << endl;
 
             if(cols == vertex_1_clicked || cols == vertex_2_clicked || cols == vertex_3_clicked)
             {
-              cout << "Clicked column :/" << endl;
+              // cout << "Clicked column :/" << endl;
               continue;
             }else{
-              cout << "Valid column" << endl;
+              // cout << "Valid column" << endl;
               V_alt.col(alt_counter) = V.col(cols);
               alt_counter++;
             }
-            cout << "Next column!" << endl;
+            // cout << "Next column!" << endl;
           } // inner V for
 
           cout << "DELETED tringle" << endl;
@@ -324,7 +324,7 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
       } //end V for
       VBO.update(V);
 
-    }
+    } //end deleteMode
 }
 
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
@@ -494,22 +494,37 @@ int main(void)
         glClear(GL_COLOR_BUFFER_BIT);
 
 
-        // CREATING TRAINGLES
+
+        // INSERTION STATE DRAWING
         if(insertClickCount == 1){
           glDrawArrays(GL_LINES, (numTriangles*3), 2);
         }else if(insertClickCount ==  2){ //need to trace out 3 lines
           glDrawArrays(GL_LINES, (numTriangles*3), 6);
         }else if(insertClickCount == 3){
           insertClickCount = 0;
-        }
-
-        // DRAWING TRIANGLES
-        if(numTriangles > 0){
           glDrawArrays( GL_TRIANGLES, 0, (numTriangles * 3));
         }
-
-        // TODO: FIX SHADER TO COLOR
-
+        // TRANSLATION STATE DRAWING
+        if(translationMode && translationPressed){
+           // Make the translated triangle white, everything else black
+          for(int i = 0; i < V.cols(); i+= 3)
+          {
+            if(i == vertex_1_clicked)
+            {
+              glUniform3f(program.uniform("triangleColor"), 1.0f, 1.0f, 1.0f);
+              glDrawArrays(GL_TRIANGLES, i, 3);
+            }else{
+              glUniform3f(program.uniform("triangleColor"), 0.0f, 0.0f, 0.0f);
+              glDrawArrays(GL_TRIANGLES, i, 3);
+            }
+          }
+        }
+        // NORMAL STATE DRAWING
+        else{
+          // Draw everything black
+          glUniform3f(program.uniform("triangleColor"), 0.0f, 0.0f, 0.0f);
+          glDrawArrays(GL_TRIANGLES, 0, (numTriangles * 3));
+        }
         // Swap front and back buffers
         glfwSwapBuffers(window);
 
