@@ -53,6 +53,7 @@ bool deleteMode = false;
 
 double currentX, currentY, previousX, previousY;
 
+// Translates triangle based on mouse movement
 void translateTriangle()
 {
   // Shift the values of the triangle in V based on the difference
@@ -94,7 +95,8 @@ void translateTriangle()
     V(1, vertex_3_clicked) -= y_difference;
   }
 }
-// Returns bool describing if the mouse clicked on a triangle
+
+// Uses barycentric interpolation to see if mouse clicked on triangle
 bool clickedOnTriangle(double mousex, double mousey, float coord1_x, float coord1_y, float coord2_x, float coord2_y, float coord3_x, float coord3_y)
 {
   Matrix3f A_;
@@ -147,8 +149,6 @@ void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos)
       V(1, (numTriangles * 3) + 3) = yworld;
       V(0, (numTriangles * 3) + 5) = xworld;
       V(1, (numTriangles * 3) + 5) = yworld;
-      // std::cout << "After second click: " << std::endl;
-      // std::cout << V << std::endl;
     }
     VBO.update(V);
   }
@@ -159,22 +159,23 @@ void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos)
     VBO.update(V);
   }
 }
+
 void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 {
+    // Get the position of the mouse in the window
+    double xpos, ypos;
+    glfwGetCursorPos(window, &xpos, &ypos);
+
+    // Get the size of the window
+    int width, height;
+    glfwGetWindowSize(window, &width, &height);
+
+    // Convert screen position to world coordinates
+    double xworld = ((xpos/double(width))*2)-1;
+    double yworld = (((height-1-ypos)/double(height))*2)-1; // NOTE: y axis is flipped in glfw
 
     if(insertionMode && action == GLFW_RELEASE) // creating a triangle out of line segments!
     {
-      // Get the position of the mouse in the window
-      double xpos, ypos;
-      glfwGetCursorPos(window, &xpos, &ypos);
-
-      // Get the size of the window
-      int width, height;
-      glfwGetWindowSize(window, &width, &height);
-
-      // Convert screen position to world coordinates
-      double xworld = ((xpos/double(width))*2)-1;
-      double yworld = (((height-1-ypos)/double(height))*2)-1; // NOTE: y axis is flipped in glfw
 
       // Update insertClickCount
       std::cout << "Mouse clicked in INSERTION mode" << std::endl;
@@ -234,18 +235,6 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 
     else if(translationMode)
     {
-      // Get the position of the mouse in the window
-      double xpos, ypos;
-      glfwGetCursorPos(window, &xpos, &ypos);
-
-      // Get the size of the window
-      int width, height;
-      glfwGetWindowSize(window, &width, &height);
-
-      // Convert screen position to world coordinates
-      double xworld = ((xpos/double(width))*2)-1;
-      double yworld = (((height-1-ypos)/double(height))*2)-1; // NOTE: y axis is flipped in glfw
-
       if(action == GLFW_PRESS)
       {
         // See if cursor position is within or on the border of a triangle
@@ -273,15 +262,68 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 
       }else if(action == GLFW_RELEASE)
       {
-        // TODO: Update VBO?
         translationPressed = false;
       }
 
-    }else if(deleteMode && action == GLFW_RELEASE)
+    }
+    else if(deleteMode && action == GLFW_RELEASE)
     {
       // See if cursor position is within or on the border of a triangle
-      // If it is, remove the 3 vertices from V
-      // Decrement numTriangles counter
+      for(int i = 0; i < V.cols(); i += 3) // 3 vertices per triangle
+      {
+        float coord1_x = V(0,i);
+        float coord1_y = V(1, i);
+
+        float coord2_x = V(0, i + 1);
+        float coord2_y = V(1, i + 1);
+
+        float coord3_x = V(0, i + 2);
+        float coord3_y = V(1, i + 2);
+
+        bool shouldDelete = clickedOnTriangle(xworld, yworld, coord1_x, coord1_y, coord2_x, coord2_y, coord3_x, coord3_y);
+
+        // If it's clicked on, sdelete it
+        // FIXME: Overlapping triangles are both deleted
+        if(shouldDelete)
+        {
+          // Get triangle information & remove it
+          numTriangles--;
+          vertex_1_clicked = i;
+          vertex_2_clicked = i + 1;
+          vertex_3_clicked = i + 2;
+
+          cout <<"Num triangles:" <<numTriangles << endl;
+          Eigen::MatrixXf V_alt(2, (numTriangles * 3));
+
+          cout <<"Old number of columns:" <<V.cols() << endl;
+          cout <<"New number of columns:" <<V_alt.cols() << endl;
+
+          int alt_counter = 0;
+          // Copy non-clicked columns of V into V_alt
+          for(int cols = 0; cols < V.cols(); cols += 1)
+          {
+            cout << cols << " : Column Number in V" << endl;
+            cout << alt_counter << " : Column Number in V_ALT" << endl;
+
+            if(cols == vertex_1_clicked || cols == vertex_2_clicked || cols == vertex_3_clicked)
+            {
+              cout << "Clicked column :/" << endl;
+              continue;
+            }else{
+              cout << "Valid column" << endl;
+              V_alt.col(alt_counter) = V.col(cols);
+              alt_counter++;
+            }
+            cout << "Next column!" << endl;
+          } // inner V for
+
+          cout << "DELETED tringle" << endl;
+          V = V_alt;
+          break;
+        } //end shouldDelete if
+      } //end V for
+      VBO.update(V);
+
     }
 }
 
@@ -305,7 +347,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
               deleteMode = false;
               break;
           case  GLFW_KEY_P:
-            std::cout << "DELETE mode"  << !deleteMode  << std::endl;
+            std::cout << "DELETE mode: "  << !deleteMode  << std::endl;
               insertionMode = false;
               translationMode = false;
               deleteMode = !deleteMode;
@@ -465,6 +507,8 @@ int main(void)
         if(numTriangles > 0){
           glDrawArrays( GL_TRIANGLES, 0, (numTriangles * 3));
         }
+
+        // TODO: FIX SHADER TO COLOR
 
         // Swap front and back buffers
         glfwSwapBuffers(window);
