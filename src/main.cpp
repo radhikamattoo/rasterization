@@ -513,8 +513,8 @@ int main(void)
             {
               glUniform3f(program.uniform("triangleColor"), 1.0f, 1.0f, 1.0f);
               glDrawArrays(GL_TRIANGLES, i, 3);
-            }else{
               glUniform3f(program.uniform("triangleColor"), 0.0f, 0.0f, 0.0f);
+            }else{
               glDrawArrays(GL_TRIANGLES, i, 3);
             }
           }
