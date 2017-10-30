@@ -18,6 +18,11 @@
 // Timer
 #include <chrono>
 
+#include <cmath>
+
+#include <math.h>
+#define PI 3.14159265
+
 using namespace std;
 using namespace Eigen;
 
@@ -33,6 +38,13 @@ int insertClickCount = 0;
 
 // If translationMode && clicked on a triangle && mouse is held down
 bool translationPressed = false;
+// If translationMode && clicked on a triangle && mouse is released
+bool translationSelected = false;
+// 1.2 booleans
+bool clockwise = false;
+bool counterclockwise = false;
+bool scaleUp = false;
+bool scaleDown = false;
 
 // Holds the indices of the triangle in V being translated
 int vertex_1_clicked = -1;
@@ -53,10 +65,18 @@ bool deleteMode = false;
 
 double currentX, currentY, previousX, previousY;
 
-// Translates triangle based on mouse movement
-void translateTriangle()
+// Contains the per-vertex color
+Eigen::MatrixXf C(3,3);
+
+// Transofmration matrices/vectors
+Eigen::Matrix2f rotation(2,2);
+Eigen::Matrix2f scaling(2,2);
+// Eigen::Vector4f translation(4);
+
+// Returns x, y coordinates of selected traingle's barycenter
+Vector2f calculateBarycenter()
 {
-  // Shift the values of the triangle in V based on the difference
+  // Get coordinates
   float coord_1_x = V(0, vertex_1_clicked);
   float coord_1_y = V(1, vertex_1_clicked);
 
@@ -66,6 +86,109 @@ void translateTriangle()
   float coord_3_x = V(0, vertex_3_clicked);
   float coord_3_y = V(1, vertex_3_clicked);
 
+  // Calculate barycenter
+  float barycenter_x = (coord_1_x + coord_2_x + coord_3_x) / 3;
+  float barycenter_y = (coord_1_y + coord_2_y + coord_3_y) / 3;
+
+  Vector2f barycenter(barycenter_x, barycenter_y);
+
+  return barycenter;
+}
+
+void resetRotation()
+{
+  rotation <<
+  1, 0, 0, 0,
+  0, 1, 0, 0,
+  0, 0, 1, 0,
+  0, 0, 0, 1;
+}
+
+void resetScaling()
+{
+  scaling <<
+  1, 0, 0, 0,
+  0, 1, 0, 0,
+  0, 0, 1, 0,
+  0, 0, 0, 1;
+}
+
+void resetVariables()
+{
+  // vertex_1_clicked = -1;
+  // vertex_2_clicked = -1;
+  // vertex_3_clicked = -1;
+  //
+  // insertClickCount = 0;
+  //
+  // resetRotation();
+  // resetScaling();
+
+}
+
+// FIXME
+void scaleTriangle(bool scaleUp)
+{
+  if(translationMode && translationSelected)
+  {
+    Vector2f barycenter = calculateBarycenter();
+
+    float scale;
+    if(scaleUp)
+    {
+      scale = 1 + 0.25;
+    }else{
+      scale = 1 - 0.25;
+    }
+
+    scaling <<
+    scale, 0,
+    0, scale;
+
+    // Apply rotation
+    for(int i = vertex_1_clicked; i <= vertex_3_clicked; i++)
+    {
+      V.col(i) -= barycenter;
+      V.col(i) = scaling * V.col(i);
+      V.col(i) += barycenter;
+    }
+    VBO.update(V);
+  }
+}
+
+
+void rotateTriangle(bool clockwise)
+{
+  if(translationMode && translationSelected)
+  {
+    Vector2f barycenter = calculateBarycenter();
+
+    float degree;
+    if(clockwise)
+    {
+      degree = -10 * (PI / 180);
+    }else{
+      degree = 10 * (PI / 180);
+    }
+
+    rotation <<
+    cos(degree), -sin(degree),
+    sin(degree), cos(degree);
+
+    // Apply rotation
+    for(int i = vertex_1_clicked; i <= vertex_3_clicked; i++)
+    {
+      V.col(i) -= barycenter;
+      V.col(i) = rotation * V.col(i);
+      V.col(i) += barycenter;
+    }
+    VBO.update(V);
+  }
+}
+
+// Translates triangle based on mouse movement
+void translateTriangle()
+{
   // Compare previousX and currentX, etc. and figure out translation
   float x_difference;
   float y_difference;
@@ -260,9 +383,10 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
           }
         }
 
-      }else if(action == GLFW_RELEASE)
+      }else if(action == GLFW_RELEASE && translationPressed)
       {
         translationPressed = false;
+        translationSelected = true;
       }
 
     }
@@ -335,23 +459,45 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
       switch (key)
       {
           case  GLFW_KEY_I:
-              std::cout << "INSERTION mode: " << !insertionMode << std::endl;
-              insertionMode = !insertionMode;
+              cout << "INSERTION mode" << endl;
+              insertionMode = true;
               translationMode = false;
               deleteMode = false;
               break;
           case GLFW_KEY_O:
-              std::cout << "TRANSLATION mode"  << !translationMode << std::endl;
+              cout << "TRANSLATION mode"  <<endl;
               insertionMode = false;
-              translationMode = !translationMode;
+              translationMode = true;
               deleteMode = false;
               break;
           case  GLFW_KEY_P:
-            std::cout << "DELETE mode: "  << !deleteMode  << std::endl;
+              cout << "DELETE mode" << endl;
               insertionMode = false;
               translationMode = false;
-              deleteMode = !deleteMode;
+              deleteMode = true;
               break;
+          case  GLFW_KEY_H:
+              cout << "Rotate Clockwise by 10 degrees"  << endl;
+              rotateTriangle(true);
+              break;
+          case  GLFW_KEY_J:
+              cout << "Rotate Counter-Clockwise by 10 degrees"  << endl;
+              rotateTriangle(false);
+              break;
+          case  GLFW_KEY_K:
+              cout << "Scale up by 25 percent" << endl;
+              scaleTriangle(true);
+              break;
+          case  GLFW_KEY_L:
+              cout << "Scale down by 25 percent" << endl;
+              scaleTriangle(false);
+              break;
+          case GLFW_KEY_ESCAPE:
+              cout << "Reset to default mode" << endl;
+              insertionMode = false;
+              translationMode = false;
+              deleteMode = false;
+              resetVariables();
           default:
               break;
       } // End switch
@@ -432,6 +578,19 @@ int main(void)
     V << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
     VBO.update(V);
 
+    // Set translation matrix for shader
+    // translation <<
+    // 0, 0,
+    // 0, 0;
+
+    scaling <<
+    1, 0,
+    0, 1;
+
+    rotation <<
+    1, 0,
+    0, 1;
+
     // Initialize the OpenGL Program
     // A program controls the OpenGL pipeline and it must contains
     // at least a vertex shader and a fragment shader to be valid
@@ -439,9 +598,14 @@ int main(void)
     const GLchar* vertex_shader =
             "#version 150 core\n"
                     "in vec2 position;"
+                    // "uniform mat4 rotation;"
+                    // "uniform mat4 scaling;"
+                    // "uniform vec4 translation;"
                     "void main()"
                     "{"
+                    // "    gl_Position = scaling * rotation * (vec4(position, 0.0, 1.0) + translation);"
                     "    gl_Position = vec4(position, 0.0, 1.0);"
+
                     "}";
     const GLchar* fragment_shader =
             "#version 150 core\n"
@@ -493,6 +657,8 @@ int main(void)
         glClearColor(0.5f, 0.5f, 0.5f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
+        // location, count, transpose, value
+        // glUniformMatrix4fv(program.uniform("transformation"), 1, GL_FALSE, transformation.data());
 
 
         // INSERTION STATE DRAWING
@@ -505,13 +671,14 @@ int main(void)
           glDrawArrays( GL_TRIANGLES, 0, (numTriangles * 3));
         }
         // TRANSLATION STATE DRAWING
-        if(translationMode && translationPressed){
-           // Make the translated triangle white, everything else black
+        if(translationMode && (translationPressed || translationSelected)){
+           // Make the selected triangle white, everything else black
           for(int i = 0; i < V.cols(); i+= 3)
           {
             if(i == vertex_1_clicked)
             {
               glUniform3f(program.uniform("triangleColor"), 1.0f, 1.0f, 1.0f);
+              // CHANGE ROTATION/SCALING MATRIX & REUPLOAD
               glDrawArrays(GL_TRIANGLES, i, 3);
               glUniform3f(program.uniform("triangleColor"), 0.0f, 0.0f, 0.0f);
             }else{
@@ -519,12 +686,15 @@ int main(void)
             }
           }
         }
+
         // NORMAL STATE DRAWING
         else{
           // Draw everything black
           glUniform3f(program.uniform("triangleColor"), 0.0f, 0.0f, 0.0f);
           glDrawArrays(GL_TRIANGLES, 0, (numTriangles * 3));
         }
+
+
         // Swap front and back buffers
         glfwSwapBuffers(window);
 
