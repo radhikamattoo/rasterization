@@ -36,6 +36,7 @@ Eigen::MatrixXf V(2,6);
 
 // Contains the per-vertex color
 Eigen::MatrixXf C(3,3);
+Matrix3f oldTranslatedColor(3,3);
 
 // Holds # of clicks for triangle insertion
 int insertClickCount = 0;
@@ -63,6 +64,9 @@ int vertex_1_clicked = -1;
 int vertex_2_clicked = -1;
 int vertex_3_clicked = -1;
 
+int vertex_1_deleted = -1;
+int vertex_2_deleted = -1;
+int vertex_3_deleted = -1;
 // # of triangles that will be drawn
 int numTriangles = 0;
 
@@ -153,16 +157,23 @@ void resetScaling()
   0, 0, 0, 1;
 }
 
-void resetVariables()
+void resetTranslationVariables()
 {
-  // vertex_1_clicked = -1;
-  // vertex_2_clicked = -1;
-  // vertex_3_clicked = -1;
-  //
-  // insertClickCount = 0;
-  //
-  // resetRotation();
-  // resetScaling();
+  if(vertex_1_clicked > -1)
+  {
+    cout << "Reseting vertex clicked variables to -1" << endl;
+    C.col(vertex_1_clicked) = oldTranslatedColor.col(0);
+    C.col(vertex_2_clicked) = oldTranslatedColor.col(1);
+    C.col(vertex_3_clicked) = oldTranslatedColor.col(2);
+
+    vertex_1_clicked = -1;
+    vertex_2_clicked = -1;
+    vertex_3_clicked = -1;
+
+    translationSelected = false;
+
+    VBO_C.update(C);
+  }
 
 }
 
@@ -445,13 +456,36 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
           // If it's clicked on, save V indices of selected triangle for mouse movement
           if(translationPressed)
           {
-            vertex_1_clicked = i;
-            vertex_2_clicked = i + 1;
-            vertex_3_clicked = i + 2;
-            C.col(vertex_1_clicked) << 1.0, 1.0, 1.0;
-            C.col(vertex_2_clicked) << 1.0, 1.0, 1.0;
-            C.col(vertex_3_clicked) << 1.0, 1.0, 1.0;
-            VBO_C.update(C);
+            // Reset the old color of previously selected triangle
+            cout << "Vertex 1 inside translation mouse press: " << vertex_1_clicked << endl;
+            cout << "i inside translation mouse press: " << i << endl;
+            if(vertex_1_clicked != i){
+              if(vertex_1_clicked > -1){
+                // Swapping selected triangles
+                cout << "Reseting old triangle color" << endl;
+                C.col(vertex_1_clicked) = oldTranslatedColor.col(0);
+                C.col(vertex_2_clicked) = oldTranslatedColor.col(1);
+                C.col(vertex_3_clicked) = oldTranslatedColor.col(2);
+              }
+              vertex_1_clicked = i;
+              vertex_2_clicked = i + 1;
+              vertex_3_clicked = i + 2;
+
+              // Hold the old color for when it's unselected
+              cout << "Storing old color" << endl;
+              oldTranslatedColor.col(0) = C.col(vertex_1_clicked);
+              oldTranslatedColor.col(1) = C.col(vertex_2_clicked);
+              oldTranslatedColor.col(2) = C.col(vertex_3_clicked);
+
+              // Make selected triangle white
+              cout << "Setting new color to white" << endl;
+              C.col(vertex_1_clicked) << 1.0, 1.0, 1.0;
+              C.col(vertex_2_clicked) << 1.0, 1.0, 1.0;
+              C.col(vertex_3_clicked) << 1.0, 1.0, 1.0;
+
+              VBO_C.update(C);
+            }
+
             break;
           }
         }
@@ -460,9 +494,6 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
       {
         translationPressed = false;
         translationSelected = true;
-        C.col(vertex_1_clicked) << 0.0, 0.0, 0.0;
-        C.col(vertex_2_clicked) << 0.0, 0.0, 0.0;
-        C.col(vertex_3_clicked) << 0.0, 0.0, 0.0;
         VBO_C.update(C);
       }
 
@@ -483,14 +514,14 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 
         bool shouldDelete = clickedOnTriangle(xworld, yworld, coord1_x, coord1_y, coord2_x, coord2_y, coord3_x, coord3_y);
 
-        // If it's clicked on, sdelete it
+        // If it's clicked on, delete it
         if(shouldDelete)
         {
           // Get triangle information & remove it
           numTriangles--;
-          vertex_1_clicked = i;
-          vertex_2_clicked = i + 1;
-          vertex_3_clicked = i + 2;
+          vertex_1_deleted = i;
+          vertex_2_deleted = i + 1;
+          vertex_3_deleted = i + 2;
 
           // cout <<"Num triangles:" <<numTriangles << endl;
           Eigen::MatrixXf V_alt(2, (numTriangles * 3));
@@ -500,7 +531,7 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
           // Copy non-clicked columns of V into V_alt
           for(int cols = 0; cols < V.cols(); cols += 1)
           {
-            if(cols == vertex_1_clicked || cols == vertex_2_clicked || cols == vertex_3_clicked)
+            if(cols == vertex_1_deleted || cols == vertex_2_deleted || cols == vertex_3_deleted)
             {
               continue;
             }else{
@@ -552,6 +583,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
               translationMode = false;
               deleteMode = false;
               colorMode = false;
+              resetTranslationVariables();
               break;
           case GLFW_KEY_O:
               cout << "TRANSLATION mode"  <<endl;
@@ -566,6 +598,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
               translationMode = false;
               deleteMode = true;
               colorMode = false;
+              resetTranslationVariables();
               break;
           case  GLFW_KEY_C:
               cout << "COLOR mode" << endl;
@@ -573,6 +606,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
               translationMode = false;
               deleteMode = false;
               colorMode = true;
+              resetTranslationVariables();
               break;
           case  GLFW_KEY_H:
               cout << "Rotate Clockwise by 10 degrees"  << endl;
@@ -645,7 +679,8 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
               insertionMode = false;
               translationMode = false;
               deleteMode = false;
-              resetVariables();
+              colorMode = false;
+              resetTranslationVariables();
           default:
               break;
       } // End switch
