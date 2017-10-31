@@ -91,36 +91,47 @@ Eigen::Matrix2f scaling(2,2);
 // Contains the view transformation
 Eigen::Matrix4f view(4,4);
 
-void shiftVertical(bool down)
+void shiftVertical(bool down,int windowWidth, int windowHeight)
 {
+  // Convert 20% of screen height from screen coordinates to world coordinates
+  Vector4f p_screen(0.0, (.20 * windowHeight), 0.0, 0.0);
+  Vector4f p_canonical( ((p_screen[0]/windowWidth) * 2 -1), (p_screen[1]/windowHeight)*2-1, 0.0, 0.0);
+  Vector4f p_world = view.inverse() * p_canonical;
+
   if(down){
-    view(1,3) -= .20;
+    view(1,3) += p_world[1];
   }else{
-    view(1,3) += .20;
+    view(1,3) -= p_world[1];
   }
 }
 
-void shiftHorizontal(bool right)
+void shiftHorizontal(bool right, int windowWidth, int windowHeight)
 {
-  // To give the appearance of moving the camera,
-  // your OpenGL application must move the scene
-  // with the inverse of the camera transformation
+  // Convert 20% of screen width from screen coordinates to world coordinates
+  Vector4f p_screen((.20 * windowWidth), 0.0, 0.0, 0.0);
+  Vector4f p_canonical( ((p_screen[0]/windowWidth) * 2 -1), (p_screen[1]/windowHeight)*2-1, 0.0, 0.0);
+  Vector4f p_world = view.inverse() * p_canonical;
+
   if(right){
-    view(0,3) += .20;
+    view(0,3) -= p_world[0];
   }else{
-    view(0,3) -= .20;
+    view(0,3) += p_world[0] ;
   }
-
 }
-void zoom(bool zoomIn)
+void zoom(bool zoomIn, int windowWidth, int windowHeight)
 {
+  // FIXME!!
+  Vector4f p_screen((.20 * windowWidth), (.20 * windowHeight), 0.0, 0.0);
+  Vector4f p_canonical( ((p_screen[0]/windowWidth) * 2 -1), (p_screen[1]/windowHeight)*2-1, 0.0, 0.0);
+  Vector4f p_world = view.inverse() * p_canonical;
+
   if(zoomIn)
   {
-    view(0,0) += 0.20;
-    view(1,1) += 0.20;
+    view(0,0) -= p_world[0];
+    view(1,1) -= p_world[1];
   }else{
-    view(0,0) -= 0.20;
-    view(1,1) -= 0.20;
+    view(0,0) += p_world[0];
+    view(1,1) += p_world[1];
   }
 }
 
@@ -592,6 +603,10 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
     // Set boolean variables if I, O, or P is pressed
     if(action == GLFW_RELEASE)
     {
+      // Get the size of the window
+      int width, height;
+      glfwGetWindowSize(window, &width, &height);
+
       switch (key)
       {
           case GLFW_KEY_I:
@@ -643,27 +658,27 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
               break;
           case GLFW_KEY_W:
               cout << "Shifting DOWN" << endl;
-              shiftVertical(true);
+              shiftVertical(true, width,height);
               break;
           case GLFW_KEY_A:
             cout << "Shifting RIGHT " << endl;
-            shiftHorizontal(true);
+            shiftHorizontal(true, width, height);
             break;
           case GLFW_KEY_S:
             cout << "Shifting UP" << endl;
-            shiftVertical(false);
+            shiftVertical(false, width, height);
             break;
           case GLFW_KEY_D:
             cout << "Shifting LEFT" << endl;
-            shiftHorizontal(false);
+            shiftHorizontal(false, width, height);
             break;
           case GLFW_KEY_MINUS:
             cout << "ZOOM OUT" << endl;
-            zoom(false);
+            zoom(false, width, height);
             break;
           case GLFW_KEY_EQUAL:
             cout << "ZOOM IN" << endl;
-            zoom(true);
+            zoom(true, width, height);
             break;
           case GLFW_KEY_1:
             pressed = 1;
