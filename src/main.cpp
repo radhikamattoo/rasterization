@@ -91,21 +91,39 @@ Eigen::Matrix2f scaling(2,2);
 // Contains the view transformation
 Eigen::Matrix4f view(4,4);
 
-void changeView()
+void shiftVertical(bool down)
 {
-  // // Get the position of the mouse in the window
-  // double xpos, ypos;
-  // glfwGetCursorPos(window, &xpos, &ypos);
-  //
-  // // Get the size of the window
-  // int width, height;
-  // glfwGetWindowSize(window, &width, &height);
-  //
-  // // Convert screen position to world coordinates
-  // Eigen::Vector4f p_screen(xpos,height-1-ypos,0,1);
-  // Eigen::Vector4f p_canonical((p_screen[0]/width)*2-1,(p_screen[1]/height)*2-1,0,1);
-  // Eigen::Vector4f p_world = view.inverse()*p_canonical;
+  if(down){
+    view(1,3) -= .20;
+  }else{
+    view(1,3) += .20;
+  }
 }
+
+void shiftHorizontal(bool right)
+{
+  // To give the appearance of moving the camera,
+  // your OpenGL application must move the scene
+  // with the inverse of the camera transformation
+  if(right){
+    view(0,3) += .20;
+  }else{
+    view(0,3) -= .20;
+  }
+
+}
+void zoom(bool zoomIn)
+{
+  if(zoomIn)
+  {
+    view(0,0) += 0.20;
+    view(1,1) += 0.20;
+  }else{
+    view(0,0) -= 0.20;
+    view(1,1) -= 0.20;
+  }
+}
+
 void colorVertex()
 {
   cout << "Pressed this num in color mode:" << endl;
@@ -161,7 +179,6 @@ void resetTranslationVariables()
 {
   if(vertex_1_clicked > -1)
   {
-    cout << "Reseting vertex clicked variables to -1" << endl;
     C.col(vertex_1_clicked) = oldTranslatedColor.col(0);
     C.col(vertex_2_clicked) = oldTranslatedColor.col(1);
     C.col(vertex_3_clicked) = oldTranslatedColor.col(2);
@@ -625,18 +642,28 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
               scaleTriangle(false);
               break;
           case GLFW_KEY_W:
-            break;
+              cout << "Shifting DOWN" << endl;
+              shiftVertical(true);
+              break;
           case GLFW_KEY_A:
+            cout << "Shifting RIGHT " << endl;
+            shiftHorizontal(true);
             break;
           case GLFW_KEY_S:
+            cout << "Shifting UP" << endl;
+            shiftVertical(false);
             break;
           case GLFW_KEY_D:
+            cout << "Shifting LEFT" << endl;
+            shiftHorizontal(false);
             break;
           case GLFW_KEY_MINUS:
             cout << "ZOOM OUT" << endl;
+            zoom(false);
             break;
           case GLFW_KEY_EQUAL:
             cout << "ZOOM IN" << endl;
+            zoom(true);
             break;
           case GLFW_KEY_1:
             pressed = 1;
@@ -885,7 +912,6 @@ int main(void)
             }
           }
         }
-
         // NORMAL STATE DRAWING
         else{
           // Draw everything black
