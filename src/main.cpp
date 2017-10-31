@@ -84,10 +84,27 @@ double currentX, currentY, previousX, previousY;
 Eigen::Matrix2f rotation(2,2);
 Eigen::Matrix2f scaling(2,2);
 
+// Contains the view transformation
+Eigen::Matrix4f view(4,4);
 
+void changeView()
+{
+  // // Get the position of the mouse in the window
+  // double xpos, ypos;
+  // glfwGetCursorPos(window, &xpos, &ypos);
+  //
+  // // Get the size of the window
+  // int width, height;
+  // glfwGetWindowSize(window, &width, &height);
+  //
+  // // Convert screen position to world coordinates
+  // Eigen::Vector4f p_screen(xpos,height-1-ypos,0,1);
+  // Eigen::Vector4f p_canonical((p_screen[0]/width)*2-1,(p_screen[1]/height)*2-1,0,1);
+  // Eigen::Vector4f p_world = view.inverse()*p_canonical;
+}
 void colorVertex()
 {
-  cout << "PRESSED NUM IN COLOR MODE!" << endl;
+  cout << "Pressed this num in color mode:" << endl;
   cout << pressed << endl;
   if(colorMode && coloringVertex > -1)
   {
@@ -269,8 +286,12 @@ void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos)
   glfwGetWindowSize(window, &width, &height);
 
   // Convert screen position to world coordinates
-  double xworld = ((xpos/double(width))*2)-1;
-  double yworld = (((height-1-ypos)/double(height))*2)-1; // NOTE: y axis is flipped in glfw
+  Eigen::Vector4f p_screen(xpos,height-1-ypos,0,1);
+  Eigen::Vector4f p_canonical((p_screen[0]/width)*2-1,(p_screen[1]/height)*2-1,0,1);
+  Eigen::Vector4f p_world = view.inverse()*p_canonical;
+
+  double xworld = p_world[0];
+  double yworld = p_world[1];
 
   // Keep track of mouse positions
   if(!previousX && previousY)
@@ -316,8 +337,12 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
     glfwGetWindowSize(window, &width, &height);
 
     // Convert screen position to world coordinates
-    double xworld = ((xpos/double(width))*2)-1;
-    double yworld = (((height-1-ypos)/double(height))*2)-1; // NOTE: y axis is flipped in glfw
+    Eigen::Vector4f p_screen(xpos,height-1-ypos,0,1);
+    Eigen::Vector4f p_canonical((p_screen[0]/width)*2-1,(p_screen[1]/height)*2-1,0,1);
+    Eigen::Vector4f p_world = view.inverse()*p_canonical;
+
+    double xworld = p_world[0];
+    double yworld = p_world[1];
 
     if(insertionMode && action == GLFW_RELEASE) // creating a triangle out of line segments!
     {
@@ -423,6 +448,10 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
             vertex_1_clicked = i;
             vertex_2_clicked = i + 1;
             vertex_3_clicked = i + 2;
+            C.col(vertex_1_clicked) << 1.0, 1.0, 1.0;
+            C.col(vertex_2_clicked) << 1.0, 1.0, 1.0;
+            C.col(vertex_3_clicked) << 1.0, 1.0, 1.0;
+            VBO_C.update(C);
             break;
           }
         }
@@ -431,6 +460,10 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
       {
         translationPressed = false;
         translationSelected = true;
+        C.col(vertex_1_clicked) << 0.0, 0.0, 0.0;
+        C.col(vertex_2_clicked) << 0.0, 0.0, 0.0;
+        C.col(vertex_3_clicked) << 0.0, 0.0, 0.0;
+        VBO_C.update(C);
       }
 
     }
@@ -513,7 +546,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
     {
       switch (key)
       {
-          case  GLFW_KEY_I:
+          case GLFW_KEY_I:
               cout << "INSERTION mode" << endl;
               insertionMode = true;
               translationMode = false;
@@ -557,12 +590,20 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
               cout << "Scale down by 25 percent" << endl;
               scaleTriangle(false);
               break;
-          case GLFW_KEY_ESCAPE:
-              cout << "Reset to default mode" << endl;
-              insertionMode = false;
-              translationMode = false;
-              deleteMode = false;
-              resetVariables();
+          case GLFW_KEY_W:
+            break;
+          case GLFW_KEY_A:
+            break;
+          case GLFW_KEY_S:
+            break;
+          case GLFW_KEY_D:
+            break;
+          case GLFW_KEY_MINUS:
+            cout << "ZOOM OUT" << endl;
+            break;
+          case GLFW_KEY_EQUAL:
+            cout << "ZOOM IN" << endl;
+            break;
           case GLFW_KEY_1:
             pressed = 1;
             colorVertex();
@@ -599,6 +640,12 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
             pressed = 9;
             colorVertex();
             break;
+          case GLFW_KEY_ESCAPE:
+              cout << "Reset to default mode" << endl;
+              insertionMode = false;
+              translationMode = false;
+              deleteMode = false;
+              resetVariables();
           default:
               break;
       } // End switch
@@ -701,6 +748,13 @@ int main(void)
     0.0,  0.0,  0.0,  0.33, 0.66, 0.99, 0.0, 0.0, 0.0,
     0.0,  0.0,  0.0,  0.0,  0.0,  0.0, 0.33, 0.66, 0.99;
 
+    view <<
+    1, 0, 0, 0,
+    0, 1, 0, 0,
+    0, 0, 1, 0,
+    0, 0, 0, 1;
+
+
     // Initialize the OpenGL Program
     // A program controls the OpenGL pipeline and it must contains
     // at least a vertex shader and a fragment shader to be valid
@@ -708,15 +762,12 @@ int main(void)
     const GLchar* vertex_shader =
             "#version 150 core\n"
                     "in vec2 position;"
-                    // "uniform mat4 rotation;"
-                    // "uniform mat4 scaling;"
-                    // "uniform vec4 translation;"
+                    "uniform mat4 view;"
                     "in vec3 color;"
                     "out vec3 f_color;"
                     "void main()"
                     "{"
-                    // "    gl_Position = scaling * rotation * (vec4(position, 0.0, 1.0) + translation);"
-                    "    gl_Position = vec4(position, 0.0, 1.0);"
+                    "    gl_Position = view * vec4(position, 0.0, 1.0);"
                     "    f_color = color;"
                     "}";
     const GLchar* fragment_shader =
@@ -771,8 +822,7 @@ int main(void)
         glClearColor(0.5f, 0.5f, 0.5f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
-        // location, count, transpose, value
-        // glUniformMatrix4fv(program.uniform("transformation"), 1, GL_FALSE, transformation.data());
+        glUniformMatrix4fv(program.uniform("view"), 1, GL_FALSE, view.data());
 
 
         // INSERTION STATE DRAWING
