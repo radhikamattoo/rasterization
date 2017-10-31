@@ -28,10 +28,14 @@ using namespace Eigen;
 
 // VertexBufferObject wrapper
 VertexBufferObject VBO;
+VertexBufferObject VBO_C;
 
 // Contains the vertex positions
 //(numRows, numCols)
 Eigen::MatrixXf V(2,6);
+
+// Contains the per-vertex color
+Eigen::MatrixXf C(3,3);
 
 // Holds # of clicks for triangle insertion
 int insertClickCount = 0;
@@ -45,6 +49,14 @@ bool clockwise = false;
 bool counterclockwise = false;
 bool scaleUp = false;
 bool scaleDown = false;
+
+// Index of selected vertex to color
+int coloringVertex = -1;
+
+// Number pressed while in color mode
+int pressed = -1;
+
+MatrixXf colors(3, 9);
 
 // Holds the indices of the triangle in V being translated
 int vertex_1_clicked = -1;
@@ -63,16 +75,27 @@ bool translationMode = false;
 // Am I currently deleting a triangle?
 bool deleteMode = false;
 
+// Am I currently coloring a triangle vertex?
+bool colorMode = false;
+
 double currentX, currentY, previousX, previousY;
 
-// Contains the per-vertex color
-Eigen::MatrixXf C(3,3);
-
-// Transofmration matrices/vectors
+// Transformation matrices/vectors
 Eigen::Matrix2f rotation(2,2);
 Eigen::Matrix2f scaling(2,2);
-// Eigen::Vector4f translation(4);
 
+
+void colorVertex()
+{
+  cout << "PRESSED NUM IN COLOR MODE!" << endl;
+  cout << pressed << endl;
+  if(colorMode && coloringVertex > -1)
+  {
+    int idx = pressed - 1 ; //off by 1 error
+    C.col(coloringVertex) = colors.col(idx);
+    VBO_C.update(C);
+  }
+}
 // Returns x, y coordinates of selected traingle's barycenter
 Vector2f calculateBarycenter()
 {
@@ -126,7 +149,6 @@ void resetVariables()
 
 }
 
-// FIXME
 void scaleTriangle(bool scaleUp)
 {
   if(translationMode && translationSelected)
@@ -299,12 +321,20 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 
     if(insertionMode && action == GLFW_RELEASE) // creating a triangle out of line segments!
     {
-
       // Update insertClickCount
       std::cout << "Mouse clicked in INSERTION mode" << std::endl;
       if(insertClickCount == 0) // First click
       {
-        V.conservativeResize(2, (numTriangles*3)+6);
+        V.conservativeResize(2, (numTriangles * 3) + 6);
+        C.conservativeResize(3, (numTriangles * 3) + 6);
+
+        // Set the color of new lines to 0
+        C.col(numTriangles * 3) << 0.0, 0.0, 0.0;
+        C.col((numTriangles * 3) + 1) << 0.0, 0.0, 0.0;
+        C.col((numTriangles * 3) + 2) << 0.0, 0.0, 0.0;
+        C.col((numTriangles * 3) + 3) << 0.0, 0.0, 0.0;
+        C.col((numTriangles * 3) + 4) << 0.0, 0.0, 0.0;
+        C.col((numTriangles * 3) + 5) << 0.0, 0.0, 0.0;
 
         // Clicking for the first time, so set the 'line' to the same coords
         V(0, ( numTriangles * 3) ) = xworld;
@@ -320,8 +350,10 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
         V(1, (( numTriangles * 3) + 4) ) = yworld;
         V(1, (( numTriangles * 3) + 5) ) = yworld;
 
-        std::cout << "\t" << V << std::endl;
+        // std::cout << "\t" << V << std::endl;
         VBO.update(V);
+        VBO_C.update(C);
+
       }else if(insertClickCount == 1){ // Second click
         // std::cout << "\t Changing V for multiple dynamic lines" << std::endl;
         V.col(( numTriangles * 3 ) + 1) << xworld, yworld;
@@ -333,29 +365,41 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
         VBO.update(V);
         // std::cout << '\t' << V << std::endl;
       }else if(insertClickCount == 2){
+
         Eigen::MatrixXf V_alt(2, (numTriangles * 3) + 3);
+        MatrixXf C_alt(3, (numTriangles * 3) + 3);
+
         int start_column = numTriangles * 3;
         // copy everything before start column into new matrix
         for(int i = 0; i < start_column; i++)
         {
           V_alt.col(i) = V.col(i);
+          C_alt.col(i) = C.col(i);
         }
+
         V_alt.col(start_column) << V(0, start_column), V(1, start_column);
         V_alt.col(start_column + 1) << V(0, (start_column + 1)), V(1, (start_column + 1));
         V_alt.col(start_column + 2) << xworld, yworld;
-        V.resize(2, ((numTriangles+1) * 3));
-        V = V_alt;
-        std::cout << "\t" << V << std::endl;
-        VBO.update(V);
+
+        C_alt.col(start_column) << 0.0, 0.0, 0.0;
+        C_alt.col(start_column + 1) << 0.0, 0.0, 0.0;
+        C_alt.col(start_column + 2) << 0.0, 0.0, 0.0;
+
         numTriangles++;
 
+        // Update vertices matrix V
+        V.resize(2, (numTriangles * 3));
+        V = V_alt;
+        VBO.update(V);
+
+        // Update color matrix C
+        C.resize(3, (numTriangles * 3));
+        C = C_alt;
+        VBO_C.update(C);
       }
       insertClickCount++;
       std::cout << "\t insertClickCount: " << insertClickCount << std::endl;
-
-
     }
-
     else if(translationMode)
     {
       if(action == GLFW_PRESS)
@@ -407,7 +451,6 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
         bool shouldDelete = clickedOnTriangle(xworld, yworld, coord1_x, coord1_y, coord2_x, coord2_y, coord3_x, coord3_y);
 
         // If it's clicked on, sdelete it
-        // FIXME: Overlapping triangles are both deleted
         if(shouldDelete)
         {
           // Get triangle information & remove it
@@ -418,37 +461,49 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 
           // cout <<"Num triangles:" <<numTriangles << endl;
           Eigen::MatrixXf V_alt(2, (numTriangles * 3));
-
-          // cout <<"Old number of columns:" <<V.cols() << endl;
-          // cout <<"New number of columns:" <<V_alt.cols() << endl;
-
+          MatrixXf C_alt(3, (numTriangles * 3));
+          // C.conservativeResize(3, (numTriangles * 3));
           int alt_counter = 0;
           // Copy non-clicked columns of V into V_alt
           for(int cols = 0; cols < V.cols(); cols += 1)
           {
-            // cout << cols << " : Column Number in V" << endl;
-            // cout << alt_counter << " : Column Number in V_ALT" << endl;
-
             if(cols == vertex_1_clicked || cols == vertex_2_clicked || cols == vertex_3_clicked)
             {
-              // cout << "Clicked column :/" << endl;
               continue;
             }else{
-              // cout << "Valid column" << endl;
               V_alt.col(alt_counter) = V.col(cols);
+              C_alt.col(alt_counter) = C.col(cols);
               alt_counter++;
             }
-            // cout << "Next column!" << endl;
           } // inner V for
 
           cout << "DELETED tringle" << endl;
           V = V_alt;
+          C = C_alt;
           break;
         } //end shouldDelete if
       } //end V for
       VBO.update(V);
+      VBO_C.update(C);
 
     } //end deleteMode
+    else if(colorMode && action == GLFW_RELEASE)
+    {
+      // Find closest vertex using Euclidean distance
+      float smallestDistance = 1000.;
+      for(int i = 0; i < V.cols(); i++)
+      {
+        float x_distance = xworld - V(0,i);
+        float y_distance = yworld - V(1, i);
+        float distance = sqrt(pow(x_distance, 2) + pow(y_distance, 2));
+        if(distance < smallestDistance)
+        {
+          cout << "Found closest vertex: " << distance <<  " is less than: " << smallestDistance << endl;
+          smallestDistance = distance;
+          coloringVertex = i;
+        }
+      }
+    }
 }
 
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
@@ -463,18 +518,28 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
               insertionMode = true;
               translationMode = false;
               deleteMode = false;
+              colorMode = false;
               break;
           case GLFW_KEY_O:
               cout << "TRANSLATION mode"  <<endl;
               insertionMode = false;
               translationMode = true;
               deleteMode = false;
+              colorMode = false;
               break;
           case  GLFW_KEY_P:
               cout << "DELETE mode" << endl;
               insertionMode = false;
               translationMode = false;
               deleteMode = true;
+              colorMode = false;
+              break;
+          case  GLFW_KEY_C:
+              cout << "COLOR mode" << endl;
+              insertionMode = false;
+              translationMode = false;
+              deleteMode = false;
+              colorMode = true;
               break;
           case  GLFW_KEY_H:
               cout << "Rotate Clockwise by 10 degrees"  << endl;
@@ -498,6 +563,42 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
               translationMode = false;
               deleteMode = false;
               resetVariables();
+          case GLFW_KEY_1:
+            pressed = 1;
+            colorVertex();
+            break;
+          case GLFW_KEY_2:
+            pressed = 2;
+            colorVertex();
+            break;
+          case GLFW_KEY_3:
+            pressed = 3;
+            colorVertex();
+            break;
+          case GLFW_KEY_4:
+            pressed = 4;
+            colorVertex();
+            break;
+          case GLFW_KEY_5:
+            pressed = 5;
+            colorVertex();
+            break;
+          case GLFW_KEY_6:
+            pressed = 6;
+            colorVertex();
+            break;
+          case GLFW_KEY_7:
+            pressed = 7;
+            colorVertex();
+            break;
+          case GLFW_KEY_8:
+            pressed = 8;
+            colorVertex();
+            break;
+          case GLFW_KEY_9:
+            pressed = 9;
+            colorVertex();
+            break;
           default:
               break;
       } // End switch
@@ -578,11 +679,15 @@ int main(void)
     V << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
     VBO.update(V);
 
-    // Set translation matrix for shader
-    // translation <<
-    // 0, 0,
-    // 0, 0;
+    // Second VBO for colors
+    VBO_C.init();
+    C <<
+    0, 0, 0,
+    0, 0, 0,
+    0, 0, 0;
+    VBO_C.update(C);
 
+    // Set translation matrices for shader
     scaling <<
     1, 0,
     0, 1;
@@ -590,6 +695,11 @@ int main(void)
     rotation <<
     1, 0,
     0, 1;
+
+    colors <<
+    0.33, 0.66, 0.99, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+    0.0,  0.0,  0.0,  0.33, 0.66, 0.99, 0.0, 0.0, 0.0,
+    0.0,  0.0,  0.0,  0.0,  0.0,  0.0, 0.33, 0.66, 0.99;
 
     // Initialize the OpenGL Program
     // A program controls the OpenGL pipeline and it must contains
@@ -601,19 +711,22 @@ int main(void)
                     // "uniform mat4 rotation;"
                     // "uniform mat4 scaling;"
                     // "uniform vec4 translation;"
+                    "in vec3 color;"
+                    "out vec3 f_color;"
                     "void main()"
                     "{"
                     // "    gl_Position = scaling * rotation * (vec4(position, 0.0, 1.0) + translation);"
                     "    gl_Position = vec4(position, 0.0, 1.0);"
-
+                    "    f_color = color;"
                     "}";
     const GLchar* fragment_shader =
             "#version 150 core\n"
+                    "in vec3 f_color;"
                     "out vec4 outColor;"
                     "uniform vec3 triangleColor;"
                     "void main()"
                     "{"
-                    "    outColor = vec4(triangleColor, 1.0);"
+                    "    outColor = vec4(f_color, 1.0);"
                     "}";
 
     // Compile the two shaders and upload the binary to the GPU
@@ -626,6 +739,7 @@ int main(void)
     // The following line connects the VBO we defined above with the position "slot"
     // in the vertex shader
     program.bindVertexAttribArray("position",VBO);
+    program.bindVertexAttribArray("color",VBO_C);
 
     // Save the current time --- it will be used to dynamically change the triangle color
     auto t_start = std::chrono::high_resolution_clock::now();
