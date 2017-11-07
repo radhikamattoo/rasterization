@@ -120,25 +120,18 @@ void shiftHorizontal(bool right, int windowWidth, int windowHeight)
 }
 void zoom(bool zoomIn, int windowWidth, int windowHeight)
 {
-  // FIXME!!
-  Vector4f p_screen((.20 * windowWidth), (.20 * windowHeight), 0.0, 0.0);
-  Vector4f p_canonical( ((p_screen[0]/windowWidth) * 2 -1), (p_screen[1]/windowHeight)*2-1, 0.0, 0.0);
-  Vector4f p_world = view.inverse() * p_canonical;
-
-  if(zoomIn)
-  {
-    view(0,0) -= p_world[0];
-    view(1,1) -= p_world[1];
+  if(zoomIn){
+    view(0,0) *= 1.2;
+    view(1,1) *= 1.2;
   }else{
-    view(0,0) += p_world[0];
-    view(1,1) += p_world[1];
+    view(0,0) *= 0.8;
+    view(1,1) *= 0.8;
   }
 }
 
 void colorVertex()
 {
-  cout << "Pressed this num in color mode:" << endl;
-  cout << pressed << endl;
+  cout << "Pressed this num in color mode:" << pressed << endl;
   if(colorMode && coloringVertex > -1)
   {
     int idx = pressed - 1 ; //off by 1 error
@@ -909,30 +902,10 @@ int main(void)
           glDrawArrays(GL_LINES, (numTriangles*3), 6);
         }else if(insertClickCount == 3){
           insertClickCount = 0;
-          glDrawArrays( GL_TRIANGLES, 0, (numTriangles * 3));
         }
-        // TRANSLATION STATE DRAWING
-        if(translationMode && (translationPressed || translationSelected)){
-           // Make the selected triangle white, everything else black
-          for(int i = 0; i < V.cols(); i+= 3)
-          {
-            if(i == vertex_1_clicked)
-            {
-              glUniform3f(program.uniform("triangleColor"), 1.0f, 1.0f, 1.0f);
-              // CHANGE ROTATION/SCALING MATRIX & REUPLOAD
-              glDrawArrays(GL_TRIANGLES, i, 3);
-              glUniform3f(program.uniform("triangleColor"), 0.0f, 0.0f, 0.0f);
-            }else{
-              glDrawArrays(GL_TRIANGLES, i, 3);
-            }
-          }
-        }
+
         // NORMAL STATE DRAWING
-        else{
-          // Draw everything black
-          glUniform3f(program.uniform("triangleColor"), 0.0f, 0.0f, 0.0f);
-          glDrawArrays(GL_TRIANGLES, 0, (numTriangles * 3));
-        }
+        glDrawArrays(GL_TRIANGLES, 0, (numTriangles * 3));
 
 
         // Swap front and back buffers
