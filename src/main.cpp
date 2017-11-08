@@ -41,9 +41,10 @@ Matrix3f oldTranslatedColor(3,3);
 // Holds # of clicks for triangle insertion
 int insertClickCount = 0;
 
-// If translationMode && clicked on a triangle && mouse is held down
+// Ifclicked on a triangle && mouse is held down
 bool translationPressed = false;
-// If translationMode && clicked on a triangle && mouse is released
+
+// If clicked on a triangle && mouse is released
 bool translationSelected = false;
 // 1.2 booleans
 bool clockwise = false;
@@ -82,7 +83,32 @@ bool deleteMode = false;
 // Am I currently coloring a triangle vertex?
 bool colorMode = false;
 
+// Am I currently setting up an animation?
+bool animationMode = false;
+bool animationPressed = false;
+bool animate = false;
+
+double original_1_X = -1;
+double original_1_Y = -1;
+
+double original_2_X = -1;
+double original_2_Y = -1;
+
+double original_3_X = -1;
+double original_3_Y = -1;
+
+double final_1_X = -1;
+double final_1_Y = -1;
+
+double final_2_X = -1;
+double final_2_Y = -1;
+
+double final_3_X = -1;
+double final_3_Y = -1;
+
 double currentX, currentY, previousX, previousY;
+
+auto t_start = std::chrono::high_resolution_clock::now();
 
 // Transformation matrices/vectors
 Eigen::Matrix2f rotation(2,2);
@@ -90,6 +116,56 @@ Eigen::Matrix2f scaling(2,2);
 
 // Contains the view transformation
 Eigen::Matrix4f view(4,4);
+
+float interpolate(float p1, float p2, float time)
+{
+  if(time == 0) return p1;
+  if(time == 1.0) return p2;
+  return p1 + (p2 - p1) * time;
+}
+void resetTranslationVariables()
+{
+  if(vertex_1_clicked > -1)
+  {
+    C.col(vertex_1_clicked) = oldTranslatedColor.col(0);
+    C.col(vertex_2_clicked) = oldTranslatedColor.col(1);
+    C.col(vertex_3_clicked) = oldTranslatedColor.col(2);
+    if(!animationMode){
+      vertex_1_clicked = -1;
+      vertex_2_clicked = -1;
+      vertex_3_clicked = -1;
+    }
+
+    translationSelected = false;
+
+    VBO_C.update(C);
+  }
+
+}
+
+void animateTriangle()
+{
+  // Set the uniform value depending on the time difference
+  auto t_now = std::chrono::high_resolution_clock::now();
+  float time = std::chrono::duration_cast<std::chrono::duration<float>>(t_now - t_start).count();
+  if(animationMode){
+    if(time <= 1.0){
+      V(0,vertex_1_clicked) = interpolate(original_1_X, final_1_X, time);
+      V(1,vertex_1_clicked) = interpolate(original_1_Y, final_1_Y, time);
+
+      V(0,vertex_2_clicked) = interpolate(original_2_X, final_2_X, time);
+      V(1,vertex_2_clicked) = interpolate(original_2_Y, final_2_Y, time);
+
+      V(0,vertex_3_clicked) = interpolate(original_3_X, final_3_X, time);
+      V(1,vertex_3_clicked) = interpolate(original_3_Y, final_3_Y, time);
+      VBO.update(V);
+    }else{
+      animationMode = false;
+      animationPressed = false;
+      resetTranslationVariables();
+    }
+  }
+}
 
 void shiftVertical(bool down,int windowWidth, int windowHeight)
 {
@@ -177,25 +253,6 @@ void resetScaling()
   0, 1, 0, 0,
   0, 0, 1, 0,
   0, 0, 0, 1;
-}
-
-void resetTranslationVariables()
-{
-  if(vertex_1_clicked > -1)
-  {
-    C.col(vertex_1_clicked) = oldTranslatedColor.col(0);
-    C.col(vertex_2_clicked) = oldTranslatedColor.col(1);
-    C.col(vertex_3_clicked) = oldTranslatedColor.col(2);
-
-    vertex_1_clicked = -1;
-    vertex_2_clicked = -1;
-    vertex_3_clicked = -1;
-
-    translationSelected = false;
-
-    VBO_C.update(C);
-  }
-
 }
 
 void scaleTriangle(bool scaleUp)
@@ -351,11 +408,13 @@ void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos)
     VBO.update(V);
   }
 
-  if(translationPressed)
+  if(translationPressed || animationPressed)
   {
+    cout << "Translating triangle" << endl;
     translateTriangle();
     VBO.update(V);
   }
+
 }
 
 void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
@@ -375,7 +434,6 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 
     double xworld = p_world[0];
     double yworld = p_world[1];
-
     if(insertionMode && action == GLFW_RELEASE) // creating a triangle out of line segments!
     {
       // Update insertClickCount
@@ -511,7 +569,8 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
           }
         }
 
-      }else if(action == GLFW_RELEASE && translationPressed)
+      }
+      else if(action == GLFW_RELEASE && translationPressed)
       {
         translationPressed = false;
         translationSelected = true;
@@ -589,8 +648,82 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
         }
       }
     }
-}
+    else if(animationMode)
+    {
+      cout << "Inside animation mode mouse click" << endl;
+      cout << "animation pressed is: " << animationPressed << endl;
+      if(action == GLFW_PRESS && !animationPressed){
+        cout << "Pressing mouse & animationpressed is FALSE" << endl;
+        // See if cursor position is within or on the border of a triangle
+        for(int i = 0; i < V.cols(); i += 3) // 3 vertices per triangle
+        {
+          float coord1_x = V(0,i);
+          float coord1_y = V(1, i);
 
+          float coord2_x = V(0, i + 1);
+          float coord2_y = V(1, i + 1);
+
+          float coord3_x = V(0, i + 2);
+          float coord3_y = V(1, i + 2);
+
+          animationPressed = clickedOnTriangle(xworld, yworld, coord1_x, coord1_y, coord2_x, coord2_y, coord3_x, coord3_y);
+          if(animationPressed)
+          {
+            cout << "Clicked on a triangle, animation pressed is TRUE" << endl;
+            // Reset the old color of previously selected triangle
+            if(vertex_1_clicked != i){
+              if(vertex_1_clicked > -1){
+                // Swapping selected triangles
+                cout << "Reseting old triangle color" << endl;
+                C.col(vertex_1_clicked) = oldTranslatedColor.col(0);
+                C.col(vertex_2_clicked) = oldTranslatedColor.col(1);
+                C.col(vertex_3_clicked) = oldTranslatedColor.col(2);
+              }
+              vertex_1_clicked = i;
+              vertex_2_clicked = i + 1;
+              vertex_3_clicked = i + 2;
+
+              // initialize 'end' animation locations
+              original_1_X = V(0,vertex_1_clicked);
+              original_1_Y = V(1,vertex_1_clicked);
+
+              original_2_X = V(0,vertex_2_clicked);
+              original_2_Y = V(1,vertex_2_clicked);
+
+              original_3_X = V(0,vertex_3_clicked);
+              original_3_Y = V(1,vertex_3_clicked);
+              // Hold the old color for when it's unselected
+              oldTranslatedColor.col(0) = C.col(vertex_1_clicked);
+              oldTranslatedColor.col(1) = C.col(vertex_2_clicked);
+              oldTranslatedColor.col(2) = C.col(vertex_3_clicked);
+
+              // Make selected triangle white
+              C.col(vertex_1_clicked) << 1.0, 1.0, 1.0;
+              C.col(vertex_2_clicked) << 1.0, 1.0, 1.0;
+              C.col(vertex_3_clicked) << 1.0, 1.0, 1.0;
+
+              VBO_C.update(C);
+            }
+          } //end translationPressed if
+        } //end for loop
+      }
+      // release mouse
+      if(action == GLFW_RELEASE && animationPressed){
+        // store current position as final point for animation
+        cout << "Released mouse, setting animationPressed to FALSE"<< endl;
+        animationPressed = false;
+        final_1_X = V(0,vertex_1_clicked);
+        final_1_Y = V(1,vertex_1_clicked);
+
+        final_2_X = V(0,vertex_2_clicked);
+        final_2_Y = V(1,vertex_2_clicked);
+
+        final_3_X = V(0,vertex_3_clicked);
+        final_3_Y = V(1,vertex_3_clicked);
+        resetTranslationVariables();
+      }
+    } //end animation if
+  }
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
     // Set boolean variables if I, O, or P is pressed
@@ -608,6 +741,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
               translationMode = false;
               deleteMode = false;
               colorMode = false;
+              animationMode = false;
               resetTranslationVariables();
               break;
           case GLFW_KEY_O:
@@ -616,6 +750,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
               translationMode = true;
               deleteMode = false;
               colorMode = false;
+              animationMode = false;
               break;
           case  GLFW_KEY_P:
               cout << "DELETE mode" << endl;
@@ -623,6 +758,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
               translationMode = false;
               deleteMode = true;
               colorMode = false;
+              animationMode = false;
               resetTranslationVariables();
               break;
           case  GLFW_KEY_C:
@@ -631,6 +767,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
               translationMode = false;
               deleteMode = false;
               colorMode = true;
+              animationMode = false;
               resetTranslationVariables();
               break;
           case  GLFW_KEY_H:
@@ -715,7 +852,27 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
               translationMode = false;
               deleteMode = false;
               colorMode = false;
+              animationMode = false;
               resetTranslationVariables();
+              break;
+          case GLFW_KEY_R:
+            // "Record" function
+            resetTranslationVariables();
+            cout << "Record mode" << endl;
+            insertionMode = false;
+            translationMode = false;
+            deleteMode = false;
+            colorMode = false;
+            animationMode = true;
+            break;
+          case GLFW_KEY_G:
+            // 'GO' for the animation
+            cout << "GO Animation Mode" << endl;
+            animate = true;
+            t_start = std::chrono::high_resolution_clock::now();
+            // auto t_start = std::chrono::high_resolution_clock::now();
+            // performAnimation(t_start);
+            break;
           default:
               break;
       } // End switch
@@ -863,7 +1020,6 @@ int main(void)
     program.bindVertexAttribArray("color",VBO_C);
 
     // Save the current time --- it will be used to dynamically change the triangle color
-    auto t_start = std::chrono::high_resolution_clock::now();
 
     // Register the keyboard callback
     glfwSetKeyCallback(window, key_callback);
@@ -873,6 +1029,7 @@ int main(void)
 
     // Register the mouse movement callback
     glfwSetCursorPosCallback(window, cursor_pos_callback);
+
 
     // Loop until the user closes the window
     while (!glfwWindowShouldClose(window))
@@ -887,13 +1044,13 @@ int main(void)
         // auto t_now = std::chrono::high_resolution_clock::now();
         // float time = std::chrono::duration_cast<std::chrono::duration<float>>(t_now - t_start).count();
         // glUniform3f(program.uniform("triangleColor"), (float)(sin(time * 4.0f) + 1.0f) / 2.0f, 0.0f, 0.0f);
+        // Set the uniform value depending on the time difference
 
         // Clear the framebuffer
         glClearColor(0.5f, 0.5f, 0.5f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
         glUniformMatrix4fv(program.uniform("view"), 1, GL_FALSE, view.data());
-
 
         // INSERTION STATE DRAWING
         if(insertClickCount == 1){
@@ -904,7 +1061,10 @@ int main(void)
           insertClickCount = 0;
         }
 
-        // NORMAL STATE DRAWING
+        if(animate){
+          animateTriangle();
+        }
+        // DRAW ALL TRIANGLES
         glDrawArrays(GL_TRIANGLES, 0, (numTriangles * 3));
 
 
