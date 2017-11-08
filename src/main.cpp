@@ -160,8 +160,10 @@ void animateTriangle()
       V(1,vertex_3_clicked) = interpolate(original_3_Y, final_3_Y, time);
       VBO.update(V);
     }else{
+      cout << "Done with animation, reseting variables" << endl;
       animationMode = false;
       animationPressed = false;
+      animate = false;
       resetTranslationVariables();
     }
   }
@@ -407,10 +409,8 @@ void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos)
     }
     VBO.update(V);
   }
-
   if(translationPressed || animationPressed)
   {
-    cout << "Translating triangle" << endl;
     translateTriangle();
     VBO.update(V);
   }
@@ -650,8 +650,7 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
     }
     else if(animationMode)
     {
-      cout << "Inside animation mode mouse click" << endl;
-      cout << "animation pressed is: " << animationPressed << endl;
+      cout << "Inside mouse callback animation pressed is: " << animationPressed << endl;
       if(action == GLFW_PRESS && !animationPressed){
         cout << "Pressing mouse & animationpressed is FALSE" << endl;
         // See if cursor position is within or on the border of a triangle
@@ -703,12 +702,14 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
               C.col(vertex_3_clicked) << 1.0, 1.0, 1.0;
 
               VBO_C.update(C);
+              cout << "At the end of mouse pressed IF, animationPressed is: " << animationPressed << endl;
             }
+            break;
           } //end translationPressed if
         } //end for loop
       }
       // release mouse
-      if(action == GLFW_RELEASE && animationPressed){
+      else if(action == GLFW_RELEASE && animationPressed){
         // store current position as final point for animation
         cout << "Released mouse, setting animationPressed to FALSE"<< endl;
         animationPressed = false;
@@ -722,6 +723,7 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
         final_3_Y = V(1,vertex_3_clicked);
         resetTranslationVariables();
       }
+      cout << "At the end of animation IF, animationPressed is: " << animationPressed << endl;
     } //end animation if
   }
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
@@ -751,6 +753,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
               deleteMode = false;
               colorMode = false;
               animationMode = false;
+              resetTranslationVariables();
               break;
           case  GLFW_KEY_P:
               cout << "DELETE mode" << endl;
@@ -867,11 +870,11 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
             break;
           case GLFW_KEY_G:
             // 'GO' for the animation
-            cout << "GO Animation Mode" << endl;
-            animate = true;
-            t_start = std::chrono::high_resolution_clock::now();
-            // auto t_start = std::chrono::high_resolution_clock::now();
-            // performAnimation(t_start);
+            if(animationMode){
+              cout << "GO Animation Mode" << endl;
+              animate = true;
+              t_start = std::chrono::high_resolution_clock::now();
+            }
             break;
           default:
               break;
