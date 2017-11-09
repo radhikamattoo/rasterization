@@ -160,7 +160,7 @@ void animateTriangle()
       V(1,vertex_3_clicked) = interpolate(original_3_Y, final_3_Y, time);
       VBO.update(V);
     }else{
-      cout << "Done with animation, reseting variables" << endl;
+      // cout << "Done with animation, reseting variables" << endl;
       animationMode = false;
       animationPressed = false;
       animate = false;
@@ -201,15 +201,17 @@ void zoom(bool zoomIn, int windowWidth, int windowHeight)
   if(zoomIn){
     view(0,0) *= 1.2;
     view(1,1) *= 1.2;
+    view(2,2) *= 1.2;
   }else{
     view(0,0) *= 0.8;
     view(1,1) *= 0.8;
+    view(2,2) *= 0.8;
   }
 }
 
 void colorVertex()
 {
-  cout << "Pressed this num in color mode:" << pressed << endl;
+  // cout << "Pressed this num in color mode:" << pressed << endl;
   if(colorMode && coloringVertex > -1)
   {
     int idx = pressed - 1 ; //off by 1 error
@@ -363,7 +365,6 @@ bool clickedOnTriangle(double mousex, double mousey, float coord1_x, float coord
   float gamma = sol[2];
 
   if(alpha > 0 && beta > 0 && gamma > 0){
-    std::cout << "Clicked on a triangle!!" << std::endl;
     return true;
   }
   return false;
@@ -437,7 +438,7 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
     if(insertionMode && action == GLFW_RELEASE) // creating a triangle out of line segments!
     {
       // Update insertClickCount
-      std::cout << "Mouse clicked in INSERTION mode" << std::endl;
+      // std::cout << "Mouse clicked in INSERTION mode" << std::endl;
       if(insertClickCount == 0) // First click
       {
         V.conservativeResize(2, (numTriangles * 3) + 6);
@@ -513,7 +514,7 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
         VBO_C.update(C);
       }
       insertClickCount++;
-      std::cout << "\t insertClickCount: " << insertClickCount << std::endl;
+      // std::cout << "\t insertClickCount: " << insertClickCount << std::endl;
     }
     else if(translationMode)
     {
@@ -536,12 +537,12 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
           if(translationPressed)
           {
             // Reset the old color of previously selected triangle
-            cout << "Vertex 1 inside translation mouse press: " << vertex_1_clicked << endl;
-            cout << "i inside translation mouse press: " << i << endl;
+            // cout << "Vertex 1 inside translation mouse press: " << vertex_1_clicked << endl;
+            // cout << "i inside translation mouse press: " << i << endl;
             if(vertex_1_clicked != i){
               if(vertex_1_clicked > -1){
                 // Swapping selected triangles
-                cout << "Reseting old triangle color" << endl;
+                // cout << "Reseting old triangle color" << endl;
                 C.col(vertex_1_clicked) = oldTranslatedColor.col(0);
                 C.col(vertex_2_clicked) = oldTranslatedColor.col(1);
                 C.col(vertex_3_clicked) = oldTranslatedColor.col(2);
@@ -551,13 +552,13 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
               vertex_3_clicked = i + 2;
 
               // Hold the old color for when it's unselected
-              cout << "Storing old color" << endl;
+              // cout << "Storing old color" << endl;
               oldTranslatedColor.col(0) = C.col(vertex_1_clicked);
               oldTranslatedColor.col(1) = C.col(vertex_2_clicked);
               oldTranslatedColor.col(2) = C.col(vertex_3_clicked);
 
               // Make selected triangle white
-              cout << "Setting new color to white" << endl;
+              // cout << "Setting new color to white" << endl;
               C.col(vertex_1_clicked) << 1.0, 1.0, 1.0;
               C.col(vertex_2_clicked) << 1.0, 1.0, 1.0;
               C.col(vertex_3_clicked) << 1.0, 1.0, 1.0;
@@ -621,7 +622,7 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
             }
           } // inner V for
 
-          cout << "DELETED tringle" << endl;
+          // cout << "DELETED tringle" << endl;
           V = V_alt;
           C = C_alt;
           break;
@@ -642,7 +643,7 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
         float distance = sqrt(pow(x_distance, 2) + pow(y_distance, 2));
         if(distance < smallestDistance)
         {
-          cout << "Found closest vertex: " << distance <<  " is less than: " << smallestDistance << endl;
+          // cout << "Found closest vertex: " << distance <<  " is less than: " << smallestDistance << endl;
           smallestDistance = distance;
           coloringVertex = i;
         }
@@ -650,9 +651,9 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
     }
     else if(animationMode)
     {
-      cout << "Inside mouse callback animation pressed is: " << animationPressed << endl;
+      // cout << "Inside mouse callback animation pressed is: " << animationPressed << endl;
       if(action == GLFW_PRESS && !animationPressed){
-        cout << "Pressing mouse & animationpressed is FALSE" << endl;
+        // cout << "Pressing mouse & animationpressed is FALSE" << endl;
         // See if cursor position is within or on the border of a triangle
         for(int i = 0; i < V.cols(); i += 3) // 3 vertices per triangle
         {
@@ -668,12 +669,12 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
           animationPressed = clickedOnTriangle(xworld, yworld, coord1_x, coord1_y, coord2_x, coord2_y, coord3_x, coord3_y);
           if(animationPressed)
           {
-            cout << "Clicked on a triangle, animation pressed is TRUE" << endl;
+            // cout << "Clicked on a triangle, animation pressed is TRUE" << endl;
             // Reset the old color of previously selected triangle
             if(vertex_1_clicked != i){
               if(vertex_1_clicked > -1){
                 // Swapping selected triangles
-                cout << "Reseting old triangle color" << endl;
+                // cout << "Reseting old triangle color" << endl;
                 C.col(vertex_1_clicked) = oldTranslatedColor.col(0);
                 C.col(vertex_2_clicked) = oldTranslatedColor.col(1);
                 C.col(vertex_3_clicked) = oldTranslatedColor.col(2);
@@ -702,7 +703,7 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
               C.col(vertex_3_clicked) << 1.0, 1.0, 1.0;
 
               VBO_C.update(C);
-              cout << "At the end of mouse pressed IF, animationPressed is: " << animationPressed << endl;
+              // cout << "At the end of mouse pressed IF, animationPressed is: " << animationPressed << endl;
             }
             break;
           } //end translationPressed if
@@ -711,7 +712,7 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
       // release mouse
       else if(action == GLFW_RELEASE && animationPressed){
         // store current position as final point for animation
-        cout << "Released mouse, setting animationPressed to FALSE"<< endl;
+        // cout << "Released mouse, setting animationPressed to FALSE"<< endl;
         animationPressed = false;
         final_1_X = V(0,vertex_1_clicked);
         final_1_Y = V(1,vertex_1_clicked);
@@ -723,7 +724,7 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
         final_3_Y = V(1,vertex_3_clicked);
         resetTranslationVariables();
       }
-      cout << "At the end of animation IF, animationPressed is: " << animationPressed << endl;
+      // cout << "At the end of animation IF, animationPressed is: " << animationPressed << endl;
     } //end animation if
   }
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
