@@ -15,6 +15,8 @@
 // IO Stream
 #include <iostream>
 
+#include <vector>
+
 // Timer
 #include <chrono>
 
@@ -33,6 +35,12 @@ VertexBufferObject VBO_C;
 // Contains the vertex positions
 //(numRows, numCols)
 Eigen::MatrixXf V(2,6);
+
+// MatrixXf Models(4,4);
+MatrixXf identityMatrix(4,4);
+
+// .push_back()
+// Models[0]
 
 // Contains the per-vertex color
 Eigen::MatrixXf C(3,3);
@@ -68,6 +76,10 @@ int vertex_3_clicked = -1;
 int vertex_1_deleted = -1;
 int vertex_2_deleted = -1;
 int vertex_3_deleted = -1;
+
+// Holds the selected triangle's model matrix starting index
+int vertex_1_model = -1;
+
 // # of triangles that will be drawn
 int numTriangles = 0;
 
@@ -90,39 +102,36 @@ bool animate = false;
 
 double original_1_X = -1;
 double original_1_Y = -1;
-
-double original_2_X = -1;
-double original_2_Y = -1;
-
-double original_3_X = -1;
-double original_3_Y = -1;
-
 double final_1_X = -1;
 double final_1_Y = -1;
-
-double final_2_X = -1;
-double final_2_Y = -1;
-
-double final_3_X = -1;
-double final_3_Y = -1;
 
 double currentX, currentY, previousX, previousY;
 
 auto t_start = std::chrono::high_resolution_clock::now();
 
-// Transformation matrices/vectors
-Eigen::Matrix2f rotation(2,2);
-Eigen::Matrix2f scaling(2,2);
-
 // Contains the view transformation
 Eigen::Matrix4f view(4,4);
 
+// Transformation matrices
+Eigen::MatrixXf translation(4,4);
+Eigen::MatrixXf rotation(4,4);
+Eigen::MatrixXf scaling(4,4);
+// Model matrix
+Eigen::MatrixXf model(4,4);
+
+// Maps an index in V to an index in model
+int mapToModel(int v_index){
+  return v_index + floor(v_index/3);
+}
+
+// Linearly interpolate position b/w 2 points, given a time
 float interpolate(float p1, float p2, float time)
 {
   if(time == 0) return p1;
   if(time == 1.0) return p2;
-  return p1 + (p2 - p1) * time;
+  return p1 + ((p2 - p1) * time);
 }
+
 void resetTranslationVariables()
 {
   if(vertex_1_clicked > -1)
@@ -134,8 +143,8 @@ void resetTranslationVariables()
       vertex_1_clicked = -1;
       vertex_2_clicked = -1;
       vertex_3_clicked = -1;
+      vertex_1_model = -1;
     }
-
     translationSelected = false;
 
     VBO_C.update(C);
@@ -150,17 +159,36 @@ void animateTriangle()
   float time = std::chrono::duration_cast<std::chrono::duration<float>>(t_now - t_start).count();
   if(animationMode){
     if(time <= 1.0){
-      V(0,vertex_1_clicked) = interpolate(original_1_X, final_1_X, time);
-      V(1,vertex_1_clicked) = interpolate(original_1_Y, final_1_Y, time);
+      float x_point =  interpolate(original_1_X, final_1_X, time);
+      float y_point =  interpolate(original_1_Y, final_1_Y, time);
+      // cout << "X difference: " << x_diff << endl;
 
-      V(0,vertex_2_clicked) = interpolate(original_2_X, final_2_X, time);
-      V(1,vertex_2_clicked) = interpolate(original_2_Y, final_2_Y, time);
+      Vector4f vec(x_point, y_point, 0.0, 1.0);
 
-      V(0,vertex_3_clicked) = interpolate(original_3_X, final_3_X, time);
-      V(1,vertex_3_clicked) = interpolate(original_3_Y, final_3_Y, time);
-      VBO.update(V);
+      // Convert model coordinates to V coordinates
+      Vector4f new_position = model.block(0, vertex_1_model, 4,4).inverse() * vec;
+      float x_diff;
+      float y_diff;
+
+      if(V(0, vertex_1_clicked) > new_position[0]){ //moved left
+        x_diff = V(0, vertex_1_clicked) - new_position[0];
+        translation(0, vertex_1_model + 3) -= x_diff;
+      }else{
+        x_diff = new_position[0] - V(0, vertex_1_clicked);
+        translation(0, vertex_1_model + 3) += x_diff;
+      }
+
+      if(V(1, vertex_1_clicked) > new_position[1]){ //moved down
+        y_diff = V(1, vertex_1_clicked) - new_position[1];
+        translation(1,vertex_1_model + 3) -= y_diff;
+      }else{
+        y_diff = new_position[1] - V(1, vertex_1_clicked);
+        translation(1,vertex_1_model + 3) += y_diff;
+      }
+      model.block(0, vertex_1_model, 4,4) = translation.block(0, vertex_1_model, 4, 4) * rotation.block(0, vertex_1_model, 4, 4) * scaling.block(0, vertex_1_model, 4, 4);
+
     }else{
-      // cout << "Done with animation, reseting variables" << endl;
+      cout << "Done with animation, reseting variables" << endl;
       animationMode = false;
       animationPressed = false;
       animate = false;
@@ -196,6 +224,7 @@ void shiftHorizontal(bool right, int windowWidth, int windowHeight)
     view(0,3) += p_world[0] ;
   }
 }
+
 void zoom(bool zoomIn, int windowWidth, int windowHeight)
 {
   if(zoomIn){
@@ -272,22 +301,31 @@ void scaleTriangle(bool scaleUp)
     }else{
       scale = 1 - 0.25;
     }
+    Matrix4f toScale;
+    toScale <<
+    scale,      0,       0, 0,
+    0,         scale,    0, 0,
+    0,          0,       1, 0,
+    0,          0,       0, 1;
 
-    scaling <<
-    scale, 0,
-    0, scale;
+    Matrix4f negativeTranslation;
+    negativeTranslation <<
+    1, 0, 0, -barycenter[0],
+    0, 1, 0, -barycenter[1],
+    0, 0, 1,      0,
+    0, 0, 0,      1;
 
-    // Apply rotation
-    for(int i = vertex_1_clicked; i <= vertex_3_clicked; i++)
-    {
-      V.col(i) -= barycenter;
-      V.col(i) = scaling * V.col(i);
-      V.col(i) += barycenter;
-    }
-    VBO.update(V);
+    Matrix4f positiveTranslation;
+    positiveTranslation <<
+    1, 0, 0, barycenter[0],
+    0, 1, 0, barycenter[1],
+    0, 0, 1,      0,
+    0, 0, 0,      1;
+
+    scaling.block(0, vertex_1_model, 4, 4) = positiveTranslation * toScale * negativeTranslation * scaling.block(0, vertex_1_model, 4, 4);
+    model.block(0, vertex_1_model, 4,4) = translation.block(0, vertex_1_model, 4, 4) * rotation.block(0, vertex_1_model, 4, 4) * scaling.block(0, vertex_1_model, 4, 4) ;
   }
 }
-
 
 void rotateTriangle(bool clockwise)
 {
@@ -302,19 +340,30 @@ void rotateTriangle(bool clockwise)
     }else{
       degree = 10 * (PI / 180);
     }
+    Matrix4f toRotate;
+    toRotate <<
+    cos(degree), -sin(degree),  0, 0,
+    sin(degree), cos(degree),   0, 0,
+    0,          0,              1,  0,
+    0,          0,              0,  1;
 
-    rotation <<
-    cos(degree), -sin(degree),
-    sin(degree), cos(degree);
+    Matrix4f negativeTranslation;
+    negativeTranslation <<
+    1, 0, 0, -barycenter[0],
+    0, 1, 0, -barycenter[1],
+    0, 0, 1,      0,
+    0, 0, 0,      1;
 
-    // Apply rotation
-    for(int i = vertex_1_clicked; i <= vertex_3_clicked; i++)
-    {
-      V.col(i) -= barycenter;
-      V.col(i) = rotation * V.col(i);
-      V.col(i) += barycenter;
-    }
-    VBO.update(V);
+    Matrix4f positiveTranslation;
+    positiveTranslation <<
+    1, 0, 0, barycenter[0],
+    0, 1, 0, barycenter[1],
+    0, 0, 1,      0,
+    0, 0, 0,      1;
+
+    rotation.block(0, vertex_1_model, 4, 4) = positiveTranslation * toRotate * negativeTranslation * rotation.block(0, vertex_1_model, 4, 4);
+    model.block(0, vertex_1_model, 4,4) = translation.block(0, vertex_1_model, 4, 4) * rotation.block(0, vertex_1_model, 4, 4) * scaling.block(0, vertex_1_model, 4, 4) ;
+
   }
 }
 
@@ -327,28 +376,21 @@ void translateTriangle()
   if(currentX > previousX) // mouse moved right
   {
     x_difference = currentX - previousX;
-    V(0, vertex_1_clicked) += x_difference;
-    V(0, vertex_2_clicked) += x_difference;
-    V(0, vertex_3_clicked) += x_difference;
+    translation(0,vertex_1_model + 3) += x_difference;
   }else{ // mouse moved left
     x_difference = previousX - currentX;
-    V(0, vertex_1_clicked) -= x_difference;
-    V(0, vertex_2_clicked) -= x_difference;
-    V(0, vertex_3_clicked) -= x_difference;
+    translation(0, vertex_1_model + 3) -= x_difference;
   }
 
   if(currentY > previousY) // mouse moved up
   {
     y_difference = currentY - previousY;
-    V(1, vertex_1_clicked) += y_difference;
-    V(1, vertex_2_clicked) += y_difference;
-    V(1, vertex_3_clicked) += y_difference;
+    translation(1,vertex_1_model + 3) += y_difference;
   }else{ //mouse moved down
     y_difference = previousY - currentY;
-    V(1, vertex_1_clicked) -= y_difference;
-    V(1, vertex_2_clicked) -= y_difference;
-    V(1, vertex_3_clicked) -= y_difference;
+    translation(1,vertex_1_model + 3) -= y_difference;
   }
+  model.block(0, vertex_1_model, 4,4) = translation.block(0, vertex_1_model, 4, 4) * rotation.block(0, vertex_1_model, 4, 4) * scaling.block(0, vertex_1_model, 4, 4);
 }
 
 // Uses barycentric interpolation to see if mouse clicked on triangle
@@ -413,7 +455,6 @@ void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos)
   if(translationPressed || animationPressed)
   {
     translateTriangle();
-    VBO.update(V);
   }
 
 }
@@ -435,6 +476,7 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 
     double xworld = p_world[0];
     double yworld = p_world[1];
+
     if(insertionMode && action == GLFW_RELEASE) // creating a triangle out of line segments!
     {
       // Update insertClickCount
@@ -470,7 +512,8 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
         VBO.update(V);
         VBO_C.update(C);
 
-      }else if(insertClickCount == 1){ // Second click
+      }
+      else if(insertClickCount == 1){ // Second click
         // std::cout << "\t Changing V for multiple dynamic lines" << std::endl;
         V.col(( numTriangles * 3 ) + 1) << xworld, yworld;
         V.col( (numTriangles * 3) + 2) << V( 0, ( numTriangles * 3 )), V( 1, ( numTriangles * 3 ));
@@ -486,6 +529,8 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
         MatrixXf C_alt(3, (numTriangles * 3) + 3);
 
         int start_column = numTriangles * 3;
+        int model_start_column = numTriangles * 4;
+
         // copy everything before start column into new matrix
         for(int i = 0; i < start_column; i++)
         {
@@ -502,6 +547,32 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
         C_alt.col(start_column + 2) << 0.0, 0.0, 0.0;
 
         numTriangles++;
+
+        model.conservativeResize(4, (numTriangles * 4));
+        scaling.conservativeResize(4, (numTriangles * 4));
+        translation.conservativeResize(4, (numTriangles * 4));
+        rotation.conservativeResize(4, (numTriangles * 4));
+
+        model.col(model_start_column) << 1, 0, 0, 0;
+        model.col(model_start_column + 1) << 0, 1, 0, 0;
+        model.col(model_start_column + 2) << 0, 0, 1, 0;
+        model.col(model_start_column + 3) << 0, 0, 0, 1;
+
+        scaling.col(model_start_column) << 1, 0, 0, 0;
+        scaling.col(model_start_column + 1) << 0, 1, 0, 0;
+        scaling.col(model_start_column + 2) << 0, 0, 1, 0;
+        scaling.col(model_start_column + 3) << 0, 0, 0, 1;
+
+        translation.col(model_start_column) << 1, 0, 0, 0;
+        translation.col(model_start_column + 1) << 0, 1, 0, 0;
+        translation.col(model_start_column + 2) << 0, 0, 1, 0;
+        translation.col(model_start_column + 3) << 0, 0, 0, 1;
+
+        rotation.col(model_start_column) << 1, 0, 0, 0;
+        rotation.col(model_start_column + 1) << 0, 1, 0, 0;
+        rotation.col(model_start_column + 2) << 0, 0, 1, 0;
+        rotation.col(model_start_column + 3) << 0, 0, 0, 1;
+        cout << "Appended new model matrix, number of columns is:" << model.cols() << endl;
 
         // Update vertices matrix V
         V.resize(2, (numTriangles * 3));
@@ -523,19 +594,32 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
         // See if cursor position is within or on the border of a triangle
         for(int i = 0; i < V.cols(); i += 3) // 3 vertices per triangle
         {
-          float coord1_x = V(0,i);
-          float coord1_y = V(1, i);
+          int model_idx = mapToModel(i);
 
-          float coord2_x = V(0, i + 1);
-          float coord2_y = V(1, i + 1);
+          Vector4f point1(V(0,i), V(1,i), 0., 1.);
+          Vector4f point2(V(0,i + 1), V(1,i + 1), 0., 1.);
+          Vector4f point3(V(0,i + 2), V(1,i + 2), 0., 1.);
 
-          float coord3_x = V(0, i + 2);
-          float coord3_y = V(1, i + 2);
+          Vector4f newpoint1 = model.block(0, model_idx, 4, 4) * point1;
+          Vector4f newpoint2 = model.block(0, model_idx, 4, 4) * point2;
+          Vector4f newpoint3 = model.block(0, model_idx, 4, 4) * point3;
+
+          float coord1_x = newpoint1[0];
+          float coord1_y = newpoint1[1];
+
+          float coord2_x = newpoint2[0];
+          float coord2_y = newpoint2[1];
+
+          float coord3_x = newpoint3[0];
+          float coord3_y = newpoint3[1];
 
           translationPressed = clickedOnTriangle(xworld, yworld, coord1_x, coord1_y, coord2_x, coord2_y, coord3_x, coord3_y);
+
+          cout << "Translation pressed is: (0 for false, 1 for true): " << translationPressed << endl;
           // If it's clicked on, save V indices of selected triangle for mouse movement
           if(translationPressed)
           {
+            cout << "Clicked a triangle" << endl;
             // Reset the old color of previously selected triangle
             // cout << "Vertex 1 inside translation mouse press: " << vertex_1_clicked << endl;
             // cout << "i inside translation mouse press: " << i << endl;
@@ -550,6 +634,8 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
               vertex_1_clicked = i;
               vertex_2_clicked = i + 1;
               vertex_3_clicked = i + 2;
+
+              vertex_1_model = mapToModel(i);
 
               // Hold the old color for when it's unselected
               // cout << "Storing old color" << endl;
@@ -584,14 +670,24 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
       // See if cursor position is within or on the border of a triangle
       for(int i = 0; i < V.cols(); i += 3) // 3 vertices per triangle
       {
-        float coord1_x = V(0,i);
-        float coord1_y = V(1, i);
+        int model_idx = mapToModel(i);
 
-        float coord2_x = V(0, i + 1);
-        float coord2_y = V(1, i + 1);
+        Vector4f point1(V(0,i), V(1,i), 0., 1.);
+        Vector4f point2(V(0,i + 1), V(1,i + 1), 0., 1.);
+        Vector4f point3(V(0,i + 2), V(1,i + 2), 0., 1.);
 
-        float coord3_x = V(0, i + 2);
-        float coord3_y = V(1, i + 2);
+        Vector4f newpoint1 = model.block(0, model_idx, 4, 4) * point1;
+        Vector4f newpoint2 = model.block(0, model_idx, 4, 4) * point2;
+        Vector4f newpoint3 = model.block(0, model_idx, 4, 4) * point3;
+
+        float coord1_x = newpoint1[0];
+        float coord1_y = newpoint1[1];
+
+        float coord2_x = newpoint2[0];
+        float coord2_y = newpoint2[1];
+
+        float coord3_x = newpoint3[0];
+        float coord3_y = newpoint3[1];
 
         bool shouldDelete = clickedOnTriangle(xworld, yworld, coord1_x, coord1_y, coord2_x, coord2_y, coord3_x, coord3_y);
 
@@ -604,10 +700,15 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
           vertex_2_deleted = i + 1;
           vertex_3_deleted = i + 2;
 
-          // cout <<"Num triangles:" <<numTriangles << endl;
+          int model_delete = mapToModel(i);
+
+          Eigen::MatrixXf model_alt(4, (numTriangles * 4));
+          Eigen::MatrixXf scaling_alt(4, (numTriangles * 4));
+          Eigen::MatrixXf rotation_alt(4, (numTriangles * 4));
+          Eigen::MatrixXf translation_alt(4, (numTriangles * 4));
+
           Eigen::MatrixXf V_alt(2, (numTriangles * 3));
           MatrixXf C_alt(3, (numTriangles * 3));
-          // C.conservativeResize(3, (numTriangles * 3));
           int alt_counter = 0;
           // Copy non-clicked columns of V into V_alt
           for(int cols = 0; cols < V.cols(); cols += 1)
@@ -622,7 +723,26 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
             }
           } // inner V for
 
+
+          alt_counter = 0;
+          for(int i = 0; i < model.cols(); i+= 1){
+            if(i == model_delete || i == model_delete+1 || i == model_delete+2 || i == model_delete+3){
+              continue;
+            }else{
+              model_alt.col(alt_counter) = model.col(i);
+              scaling_alt.col(alt_counter) = scaling.col(i);
+              rotation_alt.col(alt_counter) = rotation.col(i);
+              translation_alt.col(alt_counter) = translation.col(i);
+              alt_counter++;
+            }
+          }
+
           // cout << "DELETED tringle" << endl;
+          model = model_alt;
+          scaling = scaling_alt;
+          rotation = rotation_alt;
+          translation = translation_alt;
+
           V = V_alt;
           C = C_alt;
           break;
@@ -636,10 +756,22 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
     {
       // Find closest vertex using Euclidean distance
       float smallestDistance = 1000.;
+      int model_idx = 0;
       for(int i = 0; i < V.cols(); i++)
       {
-        float x_distance = xworld - V(0,i);
-        float y_distance = yworld - V(1, i);
+        // calculate proper V
+        if(i % 3 == 0){
+          model_idx = mapToModel(i);
+        }
+
+        Vector4f point(V(0,i), V(1,i), 0., 1.);
+
+        Vector4f newpoint = model.block(0, model_idx, 4, 4) * point;
+        float x_distance = xworld - newpoint[0];
+        float y_distance = yworld - newpoint[1];
+
+        // float x_distance = xworld - V(0,i);
+        // float y_distance = yworld - V(1,i);
         float distance = sqrt(pow(x_distance, 2) + pow(y_distance, 2));
         if(distance < smallestDistance)
         {
@@ -657,14 +789,24 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
         // See if cursor position is within or on the border of a triangle
         for(int i = 0; i < V.cols(); i += 3) // 3 vertices per triangle
         {
-          float coord1_x = V(0,i);
-          float coord1_y = V(1, i);
+          int model_idx = mapToModel(i);
 
-          float coord2_x = V(0, i + 1);
-          float coord2_y = V(1, i + 1);
+          Vector4f point1(V(0,i), V(1,i), 0., 1.);
+          Vector4f point2(V(0,i + 1), V(1,i + 1), 0., 1.);
+          Vector4f point3(V(0,i + 2), V(1,i + 2), 0., 1.);
 
-          float coord3_x = V(0, i + 2);
-          float coord3_y = V(1, i + 2);
+          Vector4f newpoint1 = model.block(0, model_idx, 4, 4) * point1;
+          Vector4f newpoint2 = model.block(0, model_idx, 4, 4) * point2;
+          Vector4f newpoint3 = model.block(0, model_idx, 4, 4) * point3;
+
+          float coord1_x = newpoint1[0];
+          float coord1_y = newpoint1[1];
+
+          float coord2_x = newpoint2[0];
+          float coord2_y = newpoint2[1];
+
+          float coord3_x = newpoint3[0];
+          float coord3_y = newpoint3[1];
 
           animationPressed = clickedOnTriangle(xworld, yworld, coord1_x, coord1_y, coord2_x, coord2_y, coord3_x, coord3_y);
           if(animationPressed)
@@ -683,15 +825,17 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
               vertex_2_clicked = i + 1;
               vertex_3_clicked = i + 2;
 
-              // initialize 'end' animation locations
-              original_1_X = V(0,vertex_1_clicked);
-              original_1_Y = V(1,vertex_1_clicked);
+              vertex_1_model = mapToModel(i);
+              cout << "Inside animationPressed, vertex_1_model is: " << vertex_1_model << endl;
 
-              original_2_X = V(0,vertex_2_clicked);
-              original_2_Y = V(1,vertex_2_clicked);
+              // initialize 'start' animation locations
+              Vector4f point1(V(0,i), V(1,i), 0., 1.);
 
-              original_3_X = V(0,vertex_3_clicked);
-              original_3_Y = V(1,vertex_3_clicked);
+              Vector4f newpoint1 = model.block(0, model_idx, 4, 4) * point1;
+
+              original_1_X = newpoint1[0];
+              original_1_Y = newpoint1[1];
+
               // Hold the old color for when it's unselected
               oldTranslatedColor.col(0) = C.col(vertex_1_clicked);
               oldTranslatedColor.col(1) = C.col(vertex_2_clicked);
@@ -714,19 +858,24 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
         // store current position as final point for animation
         // cout << "Released mouse, setting animationPressed to FALSE"<< endl;
         animationPressed = false;
-        final_1_X = V(0,vertex_1_clicked);
-        final_1_Y = V(1,vertex_1_clicked);
+        int model_idx = mapToModel(vertex_1_clicked);
 
-        final_2_X = V(0,vertex_2_clicked);
-        final_2_Y = V(1,vertex_2_clicked);
+        Vector4f point1(V(0,vertex_1_clicked), V(1,vertex_1_clicked), 0., 1.);
 
-        final_3_X = V(0,vertex_3_clicked);
-        final_3_Y = V(1,vertex_3_clicked);
+        Vector4f newpoint1 = model.block(0, model_idx, 4, 4) * point1;
+
+        float coord1_x = newpoint1[0];
+        float coord1_y = newpoint1[1];
+
+        final_1_X = coord1_x ;
+        final_1_Y = coord1_y ;
+
         resetTranslationVariables();
       }
       // cout << "At the end of animation IF, animationPressed is: " << animationPressed << endl;
     } //end animation if
   }
+
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
     // Set boolean variables if I, O, or P is pressed
@@ -874,6 +1023,8 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
             if(animationMode){
               cout << "GO Animation Mode" << endl;
               animate = true;
+              cout << "Starting x: " << original_1_X << endl;
+              cout << "Ending x: " << final_1_X << endl;
               t_start = std::chrono::high_resolution_clock::now();
             }
             break;
@@ -881,9 +1032,6 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
               break;
       } // End switch
     }
-
-    // Upload the change to the GPU
-    // VBO.update(V);
 }
 
 int main(void)
@@ -965,19 +1113,16 @@ int main(void)
     0, 0, 0;
     VBO_C.update(C);
 
-    // Set translation matrices for shader
-    scaling <<
-    1, 0,
-    0, 1;
-
-    rotation <<
-    1, 0,
-    0, 1;
-
     colors <<
     0.33, 0.66, 0.99, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
     0.0,  0.0,  0.0,  0.33, 0.66, 0.99, 0.0, 0.0, 0.0,
     0.0,  0.0,  0.0,  0.0,  0.0,  0.0, 0.33, 0.66, 0.99;
+
+    identityMatrix <<
+    1, 0, 0, 0,
+    0, 1, 0, 0,
+    0, 0, 1, 0,
+    0, 0, 0, 1;
 
     view <<
     1, 0, 0, 0,
@@ -985,6 +1130,33 @@ int main(void)
     0, 0, 1, 0,
     0, 0, 0, 1;
 
+    model <<
+    1, 0, 0, 0,
+    0, 1, 0, 0,
+    0, 0, 1, 0,
+    0, 0, 0, 1;
+
+    // Translation matrices
+    scaling <<
+    1, 0, 0, 0,
+    0, 1, 0, 0,
+    0, 0, 1, 0,
+    0, 0, 0, 1;
+
+    translation <<
+    1, 0, 0, 0,
+    0, 1, 0, 0,
+    0, 0, 1, 0,
+    0, 0, 0, 1;
+
+    rotation <<
+    1, 0, 0, 0,
+    0, 1, 0, 0,
+    0, 0, 1, 0,
+    0, 0, 0, 1;
+
+
+    // Models.push_back(model);
 
     // Initialize the OpenGL Program
     // A program controls the OpenGL pipeline and it must contains
@@ -994,11 +1166,12 @@ int main(void)
             "#version 150 core\n"
                     "in vec2 position;"
                     "uniform mat4 view;"
+                    "uniform mat4 model;"
                     "in vec3 color;"
                     "out vec3 f_color;"
                     "void main()"
                     "{"
-                    "    gl_Position = view * vec4(position, 0.0, 1.0);"
+                    "    gl_Position = view * model * vec4(position, 0.0, 1.0);"
                     "    f_color = color;"
                     "}";
     const GLchar* fragment_shader =
@@ -1055,22 +1228,33 @@ int main(void)
         glClear(GL_COLOR_BUFFER_BIT);
 
         glUniformMatrix4fv(program.uniform("view"), 1, GL_FALSE, view.data());
+        // glUniformMatrix4fv(program.uniform("model"), 1, GL_FALSE, Models.data());
 
         // INSERTION STATE DRAWING
         if(insertClickCount == 1){
+          glUniformMatrix4fv(program.uniform("model"), 1, GL_FALSE, identityMatrix.data());
           glDrawArrays(GL_LINES, (numTriangles*3), 2);
         }else if(insertClickCount ==  2){ //need to trace out 3 lines
+          glUniformMatrix4fv(program.uniform("model"), 1, GL_FALSE, identityMatrix.data());
           glDrawArrays(GL_LINES, (numTriangles*3), 6);
         }else if(insertClickCount == 3){
           insertClickCount = 0;
         }
 
-        if(animate){
-          animateTriangle();
-        }
-        // DRAW ALL TRIANGLES
-        glDrawArrays(GL_TRIANGLES, 0, (numTriangles * 3));
+        // UPDATING UNIFORM MODEL MATRIX FOR EVERY TRIANGLE
+        int mode = 0;
+        for(int tri = 0; tri < (numTriangles*3); tri+=3){
+          glUniformMatrix4fv(program.uniform("model"), 1, GL_FALSE, &model(0,mode));
 
+          if(animate){
+            animateTriangle();
+            glUniformMatrix4fv(program.uniform("model"), 1, GL_FALSE, &model(0,mode));
+          }
+
+          glDrawArrays(GL_TRIANGLES, tri, 3);
+          // Iterate by 4 columns in every loop for model matrix
+          mode += 4;
+        }
 
         // Swap front and back buffers
         glfwSwapBuffers(window);
