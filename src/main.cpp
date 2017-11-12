@@ -119,6 +119,8 @@ Eigen::MatrixXf scaling(4,4);
 // Model matrix
 Eigen::MatrixXf model(4,4);
 
+// holds the old translation matrix for an animated triangle
+Eigen::Matrix4f old_translation(4,4);
 // Maps an index in V to an index in model
 int mapToModel(int v_index){
   return v_index + floor(v_index/3);
@@ -151,6 +153,33 @@ void resetTranslationVariables()
   }
 
 }
+// Translates triangle based on mouse movement
+void translateTriangle()
+{
+  // Compare previousX and currentX, etc. and figure out translation
+  float x_difference;
+  float y_difference;
+  // cout << "Previous positions: " << previousX << " , " << previousY << endl;
+  // cout << "Current positions: " << currentX << " , " << currentY << endl;
+  if(currentX > previousX) // mouse moved right
+  {
+    x_difference = currentX - previousX;
+    translation(0,vertex_1_model + 3) += x_difference;
+  }else{ // mouse moved left
+    x_difference = previousX - currentX;
+    translation(0, vertex_1_model + 3) -= x_difference;
+  }
+
+  if(currentY > previousY) // mouse moved up
+  {
+    y_difference = currentY - previousY;
+    translation(1,vertex_1_model + 3) += y_difference;
+  }else{ //mouse moved down
+    y_difference = previousY - currentY;
+    translation(1,vertex_1_model + 3) -= y_difference;
+  }
+  model.block(0, vertex_1_model, 4,4) = translation.block(0, vertex_1_model, 4, 4) * rotation.block(0, vertex_1_model, 4, 4) * scaling.block(0, vertex_1_model, 4, 4);
+}
 
 void animateTriangle()
 {
@@ -161,30 +190,30 @@ void animateTriangle()
     if(time <= 1.0){
       float x_point =  interpolate(original_1_X, final_1_X, time);
       float y_point =  interpolate(original_1_Y, final_1_Y, time);
-      // cout << "X difference: " << x_diff << endl;
 
-      Vector4f vec(x_point, y_point, 0.0, 1.0);
+      // Convert V pos to model position and compare to model interpolated point
+      Vector4f V_pos(V(0, vertex_1_clicked), V(1, vertex_1_clicked), 0.0, 1.0);
+      Vector4f old_position = model.block(0, vertex_1_model, 4, 4) * V_pos;
 
-      // Convert model coordinates to V coordinates
-      Vector4f new_position = model.block(0, vertex_1_model, 4,4).inverse() * vec;
-      float x_diff;
-      float y_diff;
-
-      if(V(0, vertex_1_clicked) > new_position[0]){ //moved left
-        x_diff = V(0, vertex_1_clicked) - new_position[0];
-        translation(0, vertex_1_model + 3) -= x_diff;
-      }else{
-        x_diff = new_position[0] - V(0, vertex_1_clicked);
-        translation(0, vertex_1_model + 3) += x_diff;
+      float x_difference;
+      float y_difference;
+      if(x_point > old_position[0]) // mouse moved right
+      {
+        x_difference = x_point - old_position[0];
+        translation(0,vertex_1_model + 3) += x_difference;
+      }else { // mouse moved left
+        x_difference = old_position[0] - x_point;
+        translation(0, vertex_1_model + 3) -= x_difference;
+      }
+      if(y_point > old_position[1]) // mouse moved up
+      {
+        y_difference = y_point - old_position[1];
+        translation(1,vertex_1_model + 3) += y_difference;
+      }else { //mouse moved down
+        y_difference = old_position[1] - y_point;
+        translation(1,vertex_1_model + 3) -= y_difference;
       }
 
-      if(V(1, vertex_1_clicked) > new_position[1]){ //moved down
-        y_diff = V(1, vertex_1_clicked) - new_position[1];
-        translation(1,vertex_1_model + 3) -= y_diff;
-      }else{
-        y_diff = new_position[1] - V(1, vertex_1_clicked);
-        translation(1,vertex_1_model + 3) += y_diff;
-      }
       model.block(0, vertex_1_model, 4,4) = translation.block(0, vertex_1_model, 4, 4) * rotation.block(0, vertex_1_model, 4, 4) * scaling.block(0, vertex_1_model, 4, 4);
 
     }else{
@@ -270,24 +299,6 @@ Vector2f calculateBarycenter()
   return barycenter;
 }
 
-void resetRotation()
-{
-  rotation <<
-  1, 0, 0, 0,
-  0, 1, 0, 0,
-  0, 0, 1, 0,
-  0, 0, 0, 1;
-}
-
-void resetScaling()
-{
-  scaling <<
-  1, 0, 0, 0,
-  0, 1, 0, 0,
-  0, 0, 1, 0,
-  0, 0, 0, 1;
-}
-
 void scaleTriangle(bool scaleUp)
 {
   if(translationMode && translationSelected)
@@ -323,6 +334,8 @@ void scaleTriangle(bool scaleUp)
     0, 0, 0,      1;
 
     scaling.block(0, vertex_1_model, 4, 4) = positiveTranslation * toScale * negativeTranslation * scaling.block(0, vertex_1_model, 4, 4);
+    // cout << "New scaling block is: \n" << endl;
+    // cout << scaling.block(0, vertex_1_model, 4, 4) << endl;
     model.block(0, vertex_1_model, 4,4) = translation.block(0, vertex_1_model, 4, 4) * rotation.block(0, vertex_1_model, 4, 4) * scaling.block(0, vertex_1_model, 4, 4) ;
   }
 }
@@ -362,36 +375,13 @@ void rotateTriangle(bool clockwise)
     0, 0, 0,      1;
 
     rotation.block(0, vertex_1_model, 4, 4) = positiveTranslation * toRotate * negativeTranslation * rotation.block(0, vertex_1_model, 4, 4);
+    // cout << "New rotation block is: \n" << endl;
+    // cout << rotation.block(0, vertex_1_model, 4, 4) << endl;
     model.block(0, vertex_1_model, 4,4) = translation.block(0, vertex_1_model, 4, 4) * rotation.block(0, vertex_1_model, 4, 4) * scaling.block(0, vertex_1_model, 4, 4) ;
 
   }
 }
 
-// Translates triangle based on mouse movement
-void translateTriangle()
-{
-  // Compare previousX and currentX, etc. and figure out translation
-  float x_difference;
-  float y_difference;
-  if(currentX > previousX) // mouse moved right
-  {
-    x_difference = currentX - previousX;
-    translation(0,vertex_1_model + 3) += x_difference;
-  }else{ // mouse moved left
-    x_difference = previousX - currentX;
-    translation(0, vertex_1_model + 3) -= x_difference;
-  }
-
-  if(currentY > previousY) // mouse moved up
-  {
-    y_difference = currentY - previousY;
-    translation(1,vertex_1_model + 3) += y_difference;
-  }else{ //mouse moved down
-    y_difference = previousY - currentY;
-    translation(1,vertex_1_model + 3) -= y_difference;
-  }
-  model.block(0, vertex_1_model, 4,4) = translation.block(0, vertex_1_model, 4, 4) * rotation.block(0, vertex_1_model, 4, 4) * scaling.block(0, vertex_1_model, 4, 4);
-}
 
 // Uses barycentric interpolation to see if mouse clicked on triangle
 bool clickedOnTriangle(double mousex, double mousey, float coord1_x, float coord1_y, float coord2_x, float coord2_y, float coord3_x, float coord3_y)
@@ -428,7 +418,7 @@ void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos)
   double yworld = p_world[1];
 
   // Keep track of mouse positions
-  if(!previousX && previousY)
+  if(!previousX && !previousY)
   {
     previousX = xworld;
     previousY = yworld;
@@ -828,13 +818,16 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
               vertex_1_model = mapToModel(i);
               cout << "Inside animationPressed, vertex_1_model is: " << vertex_1_model << endl;
 
-              // initialize 'start' animation locations
-              Vector4f point1(V(0,i), V(1,i), 0., 1.);
-
-              Vector4f newpoint1 = model.block(0, model_idx, 4, 4) * point1;
-
-              original_1_X = newpoint1[0];
-              original_1_Y = newpoint1[1];
+              // // initialize 'start' animation locations
+              // Vector4f point1(V(0,i), V(1,i), 0., 1.);
+              //
+              // Vector4f newpoint1 = model.block(0, model_idx, 4, 4) * point1;
+              // // translated into world coordinates!!
+              // original_1_X = newpoint1[0];
+              // original_1_Y = newpoint1[1];
+              old_translation = translation.block(0, vertex_1_model, 4,4);
+              original_1_X = xworld;
+              original_1_Y = yworld;
 
               // Hold the old color for when it's unselected
               oldTranslatedColor.col(0) = C.col(vertex_1_clicked);
@@ -858,17 +851,22 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
         // store current position as final point for animation
         // cout << "Released mouse, setting animationPressed to FALSE"<< endl;
         animationPressed = false;
-        int model_idx = mapToModel(vertex_1_clicked);
-
-        Vector4f point1(V(0,vertex_1_clicked), V(1,vertex_1_clicked), 0., 1.);
-
-        Vector4f newpoint1 = model.block(0, model_idx, 4, 4) * point1;
-
-        float coord1_x = newpoint1[0];
-        float coord1_y = newpoint1[1];
-
-        final_1_X = coord1_x ;
-        final_1_Y = coord1_y ;
+        // int model_idx = mapToModel(vertex_1_clicked);
+        //
+        // Vector4f point1(V(0,vertex_1_clicked), V(1,vertex_1_clicked), 0., 1.);
+        //
+        // Vector4f newpoint1 = model.block(0, model_idx, 4, 4) * point1;
+        //
+        // float coord1_x = newpoint1[0];
+        // float coord1_y = newpoint1[1];
+        //
+        // final_1_X = coord1_x ;
+        // final_1_Y = coord1_y ;
+        cout << "ANIMATION POSITIONS: " << endl;
+        cout << "Original x, y: " << original_1_X << " , " << original_1_Y << endl;
+        final_1_X = xworld;
+        final_1_Y = yworld;
+        cout << "Final x, y: " << final_1_X << " , " << final_1_Y << endl;
 
         resetTranslationVariables();
       }
@@ -1022,9 +1020,8 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
             // 'GO' for the animation
             if(animationMode){
               cout << "GO Animation Mode" << endl;
+              translation.block(0, vertex_1_model, 4,4) = old_translation;
               animate = true;
-              cout << "Starting x: " << original_1_X << endl;
-              cout << "Ending x: " << final_1_X << endl;
               t_start = std::chrono::high_resolution_clock::now();
             }
             break;
@@ -1244,13 +1241,10 @@ int main(void)
         // UPDATING UNIFORM MODEL MATRIX FOR EVERY TRIANGLE
         int mode = 0;
         for(int tri = 0; tri < (numTriangles*3); tri+=3){
-          glUniformMatrix4fv(program.uniform("model"), 1, GL_FALSE, &model(0,mode));
-
           if(animate){
             animateTriangle();
-            glUniformMatrix4fv(program.uniform("model"), 1, GL_FALSE, &model(0,mode));
           }
-
+          glUniformMatrix4fv(program.uniform("model"), 1, GL_FALSE, &model(0,mode));
           glDrawArrays(GL_TRIANGLES, tri, 3);
           // Iterate by 4 columns in every loop for model matrix
           mode += 4;
