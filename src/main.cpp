@@ -845,7 +845,7 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
       }
       // release mouse
       else if(action == GLFW_RELEASE && animationPressed){
-        Vector4f point1(V(0,vertex_1_model), V(1,vertex_1_model), 0., 1.);
+        Vector4f point1(V(0,vertex_1_clicked), V(1,vertex_1_clicked), 0., 1.);
         //
         Vector4f newpoint1 = model.block(0, vertex_1_model, 4, 4) * point1;
         // translated into world coordinates!!
