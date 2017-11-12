@@ -197,6 +197,7 @@ void animateTriangle()
 
       float x_difference;
       float y_difference;
+
       if(x_point > old_position[0]) // mouse moved right
       {
         x_difference = x_point - old_position[0];
@@ -825,6 +826,7 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
               // // translated into world coordinates!!
               // original_1_X = newpoint1[0];
               // original_1_Y = newpoint1[1];
+              cout << "Setting old_translation block to shift back to original" << endl;
               old_translation = translation.block(0, vertex_1_model, 4,4);
               original_1_X = xworld;
               original_1_Y = yworld;
@@ -1021,6 +1023,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
             if(animationMode){
               cout << "GO Animation Mode" << endl;
               translation.block(0, vertex_1_model, 4,4) = old_translation;
+              model.block(0, vertex_1_model, 4,4) = translation.block(0, vertex_1_model, 4, 4) * rotation.block(0, vertex_1_model, 4, 4) * scaling.block(0, vertex_1_model, 4, 4);
               animate = true;
               t_start = std::chrono::high_resolution_clock::now();
             }
