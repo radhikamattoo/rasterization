@@ -774,9 +774,7 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
     }
     else if(animationMode)
     {
-      // cout << "Inside mouse callback animation pressed is: " << animationPressed << endl;
       if(action == GLFW_PRESS && !animationPressed){
-        // cout << "Pressing mouse & animationpressed is FALSE" << endl;
         // See if cursor position is within or on the border of a triangle
         for(int i = 0; i < V.cols(); i += 3) // 3 vertices per triangle
         {
@@ -802,7 +800,6 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
           animationPressed = clickedOnTriangle(xworld, yworld, coord1_x, coord1_y, coord2_x, coord2_y, coord3_x, coord3_y);
           if(animationPressed)
           {
-            // cout << "Clicked on a triangle, animation pressed is TRUE" << endl;
             // Reset the old color of previously selected triangle
             if(vertex_1_clicked != i){
               if(vertex_1_clicked > -1){
@@ -820,16 +817,14 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
               cout << "Inside animationPressed, vertex_1_model is: " << vertex_1_model << endl;
 
               // // initialize 'start' animation locations
-              // Vector4f point1(V(0,i), V(1,i), 0., 1.);
+              Vector4f point1(V(0,i), V(1,i), 0., 1.);
               //
-              // Vector4f newpoint1 = model.block(0, model_idx, 4, 4) * point1;
-              // // translated into world coordinates!!
-              // original_1_X = newpoint1[0];
-              // original_1_Y = newpoint1[1];
+              Vector4f newpoint1 = model.block(0, vertex_1_model, 4, 4) * point1;
+              // translated into world coordinates!!
+              original_1_X = newpoint1[0];
+              original_1_Y = newpoint1[1];
               cout << "Setting old_translation block to shift back to original" << endl;
               old_translation = translation.block(0, vertex_1_model, 4,4);
-              original_1_X = xworld;
-              original_1_Y = yworld;
 
               // Hold the old color for when it's unselected
               oldTranslatedColor.col(0) = C.col(vertex_1_clicked);
@@ -850,26 +845,14 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
       }
       // release mouse
       else if(action == GLFW_RELEASE && animationPressed){
-        // store current position as final point for animation
-        // cout << "Released mouse, setting animationPressed to FALSE"<< endl;
-        animationPressed = false;
-        // int model_idx = mapToModel(vertex_1_clicked);
+        Vector4f point1(V(0,vertex_1_model), V(1,vertex_1_model), 0., 1.);
         //
-        // Vector4f point1(V(0,vertex_1_clicked), V(1,vertex_1_clicked), 0., 1.);
-        //
-        // Vector4f newpoint1 = model.block(0, model_idx, 4, 4) * point1;
-        //
-        // float coord1_x = newpoint1[0];
-        // float coord1_y = newpoint1[1];
-        //
-        // final_1_X = coord1_x ;
-        // final_1_Y = coord1_y ;
-        cout << "ANIMATION POSITIONS: " << endl;
-        cout << "Original x, y: " << original_1_X << " , " << original_1_Y << endl;
-        final_1_X = xworld;
-        final_1_Y = yworld;
-        cout << "Final x, y: " << final_1_X << " , " << final_1_Y << endl;
+        Vector4f newpoint1 = model.block(0, vertex_1_model, 4, 4) * point1;
+        // translated into world coordinates!!
+        final_1_X = newpoint1[0];
+        final_1_Y = newpoint1[1];
 
+        animationPressed = false;
         resetTranslationVariables();
       }
       // cout << "At the end of animation IF, animationPressed is: " << animationPressed << endl;
